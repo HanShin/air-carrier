@@ -1,0 +1,894 @@
+using System;
+using System.Collections.Generic;
+using AetherArk.Content;
+
+namespace AetherArk.Core
+{
+    public sealed class GameSimulation
+    {
+        public const int FirstExpeditionSeed = 32838;
+        public RunState State { get; private set; }
+
+        public GameSimulation(RunState state)
+        {
+            State = state ?? throw new ArgumentNullException(nameof(state));
+        }
+
+        public static GameSimulation NewRun(ProfileState profile, int seed)
+        {
+            var state = new RunState
+            {
+                seed = seed,
+                isFirstExpedition = !profile.tutorialSeen,
+                difficulty = profile.difficulty,
+                autoPauseOnWarning = profile.accessibility.autoPauseOnWarning,
+                playerShip = ContentCatalog.CreateVanguard(),
+                crew = ContentCatalog.CreateCrew(profile),
+                squadrons = ContentCatalog.CreateSquadrons(),
+                routeNodes = ContentCatalog.CreateRoute(seed),
+                convoy = new ConvoyState { supportShip = profile.supportShip },
+                random = new RandomStreamsState
+                {
+                    route = SeededRandom.Seed(seed, 0xA11CEu),
+                    combat = SeededRandom.Seed(seed, 0xC0B47u),
+                    events = SeededRandom.Seed(seed, 0xE7E17u)
+                }
+            };
+
+            if (profile.difficulty == Difficulty.Story)
+            {
+                state.resources.aether += 3;
+                state.resources.supplies += 4;
+                state.playerShip.hull += 6f;
+                state.playerShip.maxHull += 6f;
+            }
+            else if (profile.difficulty == Difficulty.Harsh)
+            {
+                state.resources.aether -= 2;
+                state.resources.supplies -= 2;
+                state.convoy.morale -= 10;
+            }
+
+            return new GameSimulation(state);
+        }
+
+        public CommandResult Execute(IGameCommand command)
+        {
+            return command == null ? CommandResult.Fail("command.invalid") : command.Execute(this);
+        }
+
+        public RouteNodeState CurrentNode => State.routeNodes.Find(node => node.id == State.currentNodeId);
+        public EncounterDefinition ActiveEncounter => ContentCatalog.GetEncounter(State.activeEncounterId);
+
+        public bool CanTravelTo(RouteNodeState target)
+        {
+            if (target == null || State.phase != GamePhase.RouteMap || target.blocked || target.visited) return false;
+            var current = CurrentNode;
+            return current != null && current.connectedIds.Contains(target.id) && State.resources.aether >= target.aetherCost;
+        }
+
+        public bool HasAffordableRoute()
+        {
+            var current = CurrentNode;
+            if (current == null || State.phase != GamePhase.RouteMap) return false;
+            for (var i = 0; i < State.routeNodes.Count; i++)
+            {
+                if (CanTravelTo(State.routeNodes[i])) return true;
+            }
+            return false;
+        }
+
+        public CommandResult TravelTo(string nodeId)
+        {
+            var target = State.routeNodes.Find(node => node.id == nodeId);
+            if (!CanTravelTo(target)) return CommandResult.Fail("command.route_unavailable");
+
+            State.resources.aether -= target.aetherCost;
+            State.currentNodeId = target.id;
+            target.visited = true;
+            State.travelCount++;
+            State.currentWeather = target.weather;
+            if (State.convoy.supportCooldown > 0) State.convoy.supportCooldown--;
+
+            if (State.travelCount % 2 == 0 && State.resources.supplies > 0) State.resources.supplies--;
+            if (State.resources.supplies <= 0)
+            {
+                State.convoy.survivors -= 25;
+                State.convoy.morale -= 8;
+                AddLog("log.convoy_starving");
+            }
+
+            State.stormColumn = Math.Max(-1, State.travelCount - 3);
+            for (var i = 0; i < State.routeNodes.Count; i++)
+            {
+                var node = State.routeNodes[i];
+                node.blocked = !node.visited && node.column <= State.stormColumn;
+            }
+
+            if (target.encounterType == EncounterType.Battle || target.encounterType == EncounterType.EliteBattle)
+            {
+                BeginCombat(target.encounterType == EncounterType.EliteBattle ? 2 : 1, false);
+            }
+            else if (target.encounterType == EncounterType.Gate)
+            {
+                BeginCombat(2, true);
+            }
+            else
+            {
+                State.activeEncounterId = target.encounterId;
+                State.phase = GamePhase.Encounter;
+            }
+
+            CheckDefeat();
+            return CommandResult.Ok("command.travelled");
+        }
+
+        public bool CanChoose(EncounterChoiceDefinition choice)
+        {
+            if (choice == null || State.phase != GamePhase.Encounter) return false;
+            if (State.resources.aether < choice.aetherCost) return false;
+            if (State.resources.supplies < choice.suppliesCost) return false;
+            if (State.resources.ordnance < choice.ordnanceCost) return false;
+            if (State.resources.salvage < choice.salvageCost) return false;
+            return string.IsNullOrEmpty(choice.requiredTag) || HasTag(choice.requiredTag);
+        }
+
+        public CommandResult ChooseEncounter(string choiceId)
+        {
+            var encounter = ActiveEncounter;
+            var choice = encounter?.choices.Find(item => item.id == choiceId);
+            if (!CanChoose(choice)) return CommandResult.Fail("command.choice_unavailable");
+
+            State.resources.aether += choice.aetherDelta - choice.aetherCost;
+            State.resources.supplies += choice.suppliesDelta - choice.suppliesCost;
+            State.resources.ordnance += choice.ordnanceDelta - choice.ordnanceCost;
+            State.resources.salvage += choice.salvageDelta - choice.salvageCost;
+            State.convoy.survivors = Math.Max(0, State.convoy.survivors + choice.survivorDelta);
+            State.convoy.morale = ClampInt(State.convoy.morale + choice.moraleDelta, 0, 100);
+            AddLog(choice.resultKey);
+
+            if (choice.id == "repair") RepairAtPort();
+            if (choice.id == "high") State.playerShip.altitude = AltitudeBand.High;
+            if (choice.id == "ride") State.playerShip.instability = Math.Max(0f, State.playerShip.instability - 20f);
+
+            State.activeEncounterId = null;
+            if (choice.startsBattle) BeginCombat(1, false);
+            else State.phase = GamePhase.RouteMap;
+            CheckDefeat();
+            return CommandResult.Ok(choice.resultKey);
+        }
+
+        public CommandResult SkipEncounter()
+        {
+            if (State.phase != GamePhase.Encounter) return CommandResult.Fail("command.invalid_phase");
+            State.activeEncounterId = null;
+            State.phase = GamePhase.RouteMap;
+            return CommandResult.Ok();
+        }
+
+        private bool HasTag(string tag)
+        {
+            if (tag == "support.pathfinder") return State.convoy.supportShip == SupportShipType.Pathfinder;
+            if (tag == "support.workshop") return State.convoy.supportShip == SupportShipType.Workshop;
+            if (tag == "support.hospital") return State.convoy.supportShip == SupportShipType.Hospital;
+            if (tag.StartsWith("lineage.", StringComparison.Ordinal))
+            {
+                var name = tag.Substring("lineage.".Length);
+                for (var i = 0; i < State.crew.Count; i++)
+                {
+                    if (!State.crew[i].isDead && string.Equals(State.crew[i].lineage.ToString(), name, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            return false;
+        }
+
+        private void RepairAtPort()
+        {
+            var ship = State.playerShip;
+            ship.hull = Math.Min(ship.maxHull, ship.hull + 8f);
+            ship.armor = Math.Min(ship.maxArmor, ship.armor + 6f);
+            for (var i = 0; i < ship.systems.Count; i++) ship.systems[i].damage = Math.Max(0f, ship.systems[i].damage - 20f);
+        }
+
+        public void BeginCombat(int tier, bool finalBattle)
+        {
+            var combatState = State.random.combat;
+            State.enemyShip = ContentCatalog.CreateEnemy(tier, ref combatState);
+            if (finalBattle)
+            {
+                State.enemyShip.maxHull += 10f;
+                State.enemyShip.hull += 10f;
+                State.enemyShip.maxArmor += 6f;
+                State.enemyShip.armor += 6f;
+                State.enemyShip.maxWard += 4f;
+                State.enemyShip.ward += 4f;
+            }
+            State.random.combat = combatState;
+            State.phase = GamePhase.Combat;
+            State.isFinalBattle = finalBattle;
+            State.isPaused = true;
+            State.combatElapsed = 0f;
+            State.playerWeaponCooldown = 0f;
+            State.enemyWeaponCooldown = finalBattle ? 3f : 4.5f;
+            State.enemySquadronCooldown = 10f;
+            State.altitudeCooldown = 0f;
+            State.weatherHazardTimer = ContentCatalog.GetWeather(State.currentWeather).hazardInterval;
+            State.interceptCharges = 0;
+            State.reconBonusSeconds = 0f;
+            State.combatLog.Clear();
+            ClearCombatAlert();
+            AddLog(finalBattle ? "log.gate_battle" : "log.combat_started");
+        }
+
+        public void SetPaused(bool paused)
+        {
+            if (State.phase != GamePhase.Combat) return;
+            State.isPaused = paused;
+            if (!paused && State.combatAlertPausedBattle) State.combatAlertPausedBattle = false;
+        }
+
+        public void TogglePause()
+        {
+            SetPaused(!State.isPaused);
+        }
+
+        public void Tick(float deltaTime)
+        {
+            if (State.phase != GamePhase.Combat || State.isPaused || deltaTime <= 0f) return;
+            var dt = Math.Min(deltaTime, 0.1f);
+            State.combatElapsed += dt;
+            State.playerWeaponCooldown = Math.Max(0f, State.playerWeaponCooldown - dt);
+            State.enemyWeaponCooldown = Math.Max(0f, State.enemyWeaponCooldown - dt);
+            State.enemySquadronCooldown = Math.Max(0f, State.enemySquadronCooldown - dt);
+            State.altitudeCooldown = Math.Max(0f, State.altitudeCooldown - dt);
+            State.reconBonusSeconds = Math.Max(0f, State.reconBonusSeconds - dt);
+            State.weatherHazardTimer -= dt;
+            State.combatAlertSeconds = Math.Max(0f, State.combatAlertSeconds - dt);
+            if (State.combatAlertSeconds <= 0f) ClearCombatAlert();
+
+            TickShipSystems(State.playerShip, dt);
+            TickShipSystems(State.enemyShip, dt);
+            TickCrew(dt);
+            TickRooms(dt);
+            TickWard(State.playerShip, dt);
+            TickWard(State.enemyShip, dt);
+            TickSquadrons(dt);
+
+            State.playerShip.instability = Math.Max(0f, State.playerShip.instability - dt * 0.45f);
+            if (State.weatherHazardTimer <= 0f) ResolveWeatherHazard();
+            if (State.enemyWeaponCooldown <= 0f) EnemyFire();
+            if (State.enemySquadronCooldown <= 0f) EnemySquadronStrike();
+
+            if (State.enemyShip != null && State.enemyShip.IsDestroyed) ResolveVictory();
+            CheckDefeat();
+        }
+
+        private static void TickShipSystems(ShipState ship, float dt)
+        {
+            if (ship == null) return;
+            for (var i = 0; i < ship.systems.Count; i++)
+            {
+                var system = ship.systems[i];
+                system.disabledSeconds = Math.Max(0f, system.disabledSeconds - dt);
+                system.overchargeSeconds = Math.Max(0f, system.overchargeSeconds - dt);
+            }
+        }
+
+        private void TickWard(ShipState ship, float dt)
+        {
+            if (ship == null || ship.ward >= ship.maxWard) return;
+            var ward = ship.GetSystem(ShipSystemType.Ward);
+            if (ward == null || ward.EffectivePower <= 0) return;
+            var profile = ContentCatalog.GetWeather(State.currentWeather);
+            var altitudeModifier = ship.altitude == AltitudeBand.High ? 1.15f : ship.altitude == AltitudeBand.Low ? 0.9f : 1f;
+            ship.ward = Math.Min(ship.maxWard, ship.ward + dt * ward.EffectivePower * 0.22f * profile.wardRegenModifier * altitudeModifier);
+        }
+
+        private void TickRooms(float dt)
+        {
+            var lifeSupport = State.playerShip.GetSystem(ShipSystemType.LifeSupport);
+            var lifePowered = lifeSupport != null && lifeSupport.EffectivePower > 0;
+            for (var i = 0; i < State.playerShip.rooms.Count; i++)
+            {
+                var room = State.playerShip.rooms[i];
+                var oxygenDelta = lifePowered ? 4f : -1.5f;
+                oxygenDelta -= room.breach * 0.08f;
+                oxygenDelta -= room.fire * 0.025f;
+                room.oxygen = Clamp(room.oxygen + oxygenDelta * dt, 0f, 100f);
+                if (room.fire > 0f) room.fire = Math.Min(100f, room.fire + dt * 0.35f);
+            }
+        }
+
+        private void TickCrew(float dt)
+        {
+            for (var i = 0; i < State.crew.Count; i++)
+            {
+                var crew = State.crew[i];
+                if (crew.isDead || crew.onSortie) continue;
+                if (crew.health <= 0f)
+                {
+                    crew.downedSeconds += dt;
+                    if (crew.downedSeconds >= 12f)
+                    {
+                        crew.isDead = true;
+                        AddLog("log.crew_lost", crew.displayName);
+                    }
+                    continue;
+                }
+
+                var room = State.playerShip.GetRoom(crew.currentRoom);
+                var system = State.playerShip.GetSystem(crew.currentRoom);
+                if (room == null || system == null) continue;
+
+                var repairRate = CrewRepairRate(crew);
+                system.damage = Math.Max(0f, system.damage - repairRate * dt);
+                room.fire = Math.Max(0f, room.fire - repairRate * 0.8f * dt);
+                room.breach = Math.Max(0f, room.breach - repairRate * 0.55f * dt);
+
+                var danger = room.fire * 0.018f + (room.oxygen < 22f ? 3.2f : 0f) + room.intruders * 1.5f;
+                if (crew.lineage == CrewLineage.Dwarf) danger *= 0.72f;
+                if (crew.lineage == CrewLineage.Avian && room.oxygen < 22f) danger *= 0.5f;
+                crew.health = Math.Max(0f, crew.health - danger * dt);
+            }
+
+            var infirmary = State.playerShip.GetSystem(ShipSystemType.Infirmary);
+            if (infirmary != null && infirmary.EffectivePower > 0)
+            {
+                for (var i = 0; i < State.crew.Count; i++)
+                {
+                    var crew = State.crew[i];
+                    if (!crew.isDead && !crew.onSortie && crew.currentRoom == ShipSystemType.Infirmary && crew.health > 0f)
+                        crew.health = Math.Min(crew.maxHealth, crew.health + dt * (2f + infirmary.EffectivePower));
+                }
+            }
+        }
+
+        private static float CrewRepairRate(CrewState crew)
+        {
+            var rate = 0.65f + crew.skillLevel * 0.25f;
+            if (crew.lineage == CrewLineage.Dwarf) rate *= 1.4f;
+            if (crew.lineage == CrewLineage.Goblin) rate *= 1.22f;
+            if (crew.role == CrewRole.Engineer) rate *= 1.35f;
+            return rate;
+        }
+
+        public CommandResult ChangePower(ShipSystemType type, int delta)
+        {
+            if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
+            var system = State.playerShip.GetSystem(type);
+            if (system == null || type == ShipSystemType.AetherCore) return CommandResult.Fail("command.invalid_system");
+            var next = ClampInt(system.power + delta, 0, system.maxPower);
+            var added = next - system.power;
+            if (added > 0 && State.playerShip.AllocatedPower() + added > State.playerShip.coreOutput)
+                return CommandResult.Fail("command.no_power");
+            system.power = next;
+            State.hasChangedPower = true;
+            return CommandResult.Ok("command.power_changed");
+        }
+
+        public CommandResult Overcharge(ShipSystemType type)
+        {
+            if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
+            var system = State.playerShip.GetSystem(type);
+            var resonator = State.crew.Find(crew => crew.role == CrewRole.Resonator && crew.IsActive && crew.currentRoom == type);
+            if (system == null || system.maxPower == 0) return CommandResult.Fail("command.invalid_system");
+            if (resonator == null) return CommandResult.Fail("command.need_resonator");
+            if (system.overchargeSeconds > 0f) return CommandResult.Fail("command.already_overcharged");
+            system.overchargeSeconds = 8f;
+            State.playerShip.instability = Clamp(State.playerShip.instability + 22f, 0f, 100f);
+            AddLog("log.overcharge", type.ToString());
+
+            if (State.playerShip.instability >= 75f)
+            {
+                var random = State.random.combat;
+                if (SeededRandom.Chance(ref random, 0.32f))
+                {
+                    system.damage = Math.Min(system.maxDamage, system.damage + 18f);
+                    State.playerShip.GetRoom(type).fire = Math.Min(100f, State.playerShip.GetRoom(type).fire + 22f);
+                    AddLog("log.resonance_accident", type.ToString());
+                    RaiseCombatAlert("alert.resonance_fire", type.ToString(), AlertSeverity.Critical, true);
+                }
+                State.random.combat = random;
+            }
+            return CommandResult.Ok("command.overcharged");
+        }
+
+        public CommandResult MoveCrew(string crewId, ShipSystemType room)
+        {
+            if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
+            var crew = State.crew.Find(item => item.id == crewId);
+            if (crew == null || crew.isDead || crew.onSortie || State.playerShip.GetRoom(room) == null)
+                return CommandResult.Fail("command.crew_unavailable");
+            crew.currentRoom = room;
+            State.hasMovedCrew = true;
+            return CommandResult.Ok("command.crew_moved");
+        }
+
+        public CommandResult FireMainWeapon(ShipSystemType target)
+        {
+            if (State.phase != GamePhase.Combat || State.enemyShip == null) return CommandResult.Fail("command.invalid_phase");
+            var weapons = State.playerShip.GetSystem(ShipSystemType.Weapons);
+            if (weapons == null || weapons.EffectivePower <= 0) return CommandResult.Fail("command.weapons_unpowered");
+            if (State.playerWeaponCooldown > 0f) return CommandResult.Fail("command.weapon_cooldown");
+
+            State.selectedEnemySystem = target;
+            State.hasFiredWeapon = true;
+            State.playerWeaponCooldown = Math.Max(2.2f, 5.2f - weapons.EffectivePower * 0.55f);
+            var random = State.random.combat;
+            var hit = SeededRandom.Chance(ref random, Accuracy(State.playerShip, State.enemyShip, true));
+            State.random.combat = random;
+            if (!hit)
+            {
+                AddLog("log.player_miss");
+                return CommandResult.Ok("command.weapon_fired");
+            }
+
+            var damage = 3.5f + weapons.EffectivePower * 0.7f;
+            ApplyDamage(State.enemyShip, target, damage, false);
+            AddLog("log.player_hit", target.ToString());
+            if (State.enemyShip.IsDestroyed) ResolveVictory();
+            return CommandResult.Ok("command.weapon_fired");
+        }
+
+        private void EnemyFire()
+        {
+            if (State.enemyShip == null) return;
+            var weapons = State.enemyShip.GetSystem(ShipSystemType.Weapons);
+            if (weapons == null || weapons.EffectivePower <= 0)
+            {
+                State.enemyWeaponCooldown = 1f;
+                return;
+            }
+
+            State.enemyWeaponCooldown = State.isFinalBattle ? 3.8f : 5.2f;
+            var random = State.random.combat;
+            var targets = State.playerShip.systems;
+            var target = targets[SeededRandom.Range(ref random, 0, targets.Count)].type;
+            var hit = SeededRandom.Chance(ref random, Accuracy(State.enemyShip, State.playerShip, false));
+            State.random.combat = random;
+            if (!hit)
+            {
+                AddLog("log.enemy_miss");
+                return;
+            }
+
+            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.78f : State.difficulty == Difficulty.Harsh ? 1.22f : 1f;
+            ApplyDamage(State.playerShip, target, (2.2f + weapons.EffectivePower * 0.45f) * difficultyMultiplier, false);
+            AddLog("log.enemy_hit", target.ToString());
+        }
+
+        private float Accuracy(ShipState attacker, ShipState defender, bool playerAttack)
+        {
+            var sensors = attacker.GetSystem(ShipSystemType.Sensors);
+            var engines = defender.GetSystem(ShipSystemType.Engines);
+            var weather = ContentCatalog.GetWeather(State.currentWeather);
+            var value = 0.72f + (sensors?.EffectivePower ?? 0) * 0.035f - (engines?.EffectivePower ?? 0) * 0.025f;
+            value += weather.accuracyModifier;
+            value -= Math.Abs((int)attacker.altitude - (int)defender.altitude) * 0.07f;
+            if (playerAttack && State.reconBonusSeconds > 0f) value += 0.16f;
+            return Clamp(value, 0.2f, 0.96f);
+        }
+
+        public CommandResult ChangeAltitude(AltitudeBand altitude)
+        {
+            if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
+            if (State.altitudeCooldown > 0f) return CommandResult.Fail("command.altitude_cooldown");
+            var lift = State.playerShip.GetSystem(ShipSystemType.LiftArray);
+            if (lift == null || lift.EffectivePower <= 0) return CommandResult.Fail("command.lift_unpowered");
+            if (State.playerShip.altitude == altitude) return CommandResult.Fail("command.altitude_same");
+
+            var distance = Math.Abs((int)State.playerShip.altitude - (int)altitude);
+            State.playerShip.altitude = altitude;
+            State.altitudeCooldown = Math.Max(2f, 6f - lift.EffectivePower * 0.8f) * distance;
+            State.playerShip.instability = Clamp(State.playerShip.instability + 4f * distance, 0f, 100f);
+            AddLog("log.altitude_changed", altitude.ToString());
+            return CommandResult.Ok("command.altitude_changed");
+        }
+
+        public CommandResult LaunchSquadron(string squadronId, SquadronMission mission, ShipSystemType target)
+        {
+            if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
+            var deck = State.playerShip.GetSystem(ShipSystemType.FlightDeck);
+            var squadron = State.squadrons.Find(item => item.id == squadronId);
+            if (deck == null || deck.EffectivePower <= 0) return CommandResult.Fail("command.deck_unpowered");
+            if (squadron == null || !squadron.CanLaunch) return CommandResult.Fail("command.squadron_unavailable");
+            if (State.resources.ordnance < squadron.ordnanceCost) return CommandResult.Fail("command.no_ordnance");
+            if (mission == SquadronMission.None || mission == SquadronMission.Recall) return CommandResult.Fail("command.invalid_mission");
+
+            State.resources.ordnance -= squadron.ordnanceCost;
+            State.hasLaunchedSquadron = true;
+            squadron.mission = mission;
+            squadron.targetSystem = target;
+            squadron.status = SquadronStatus.Launching;
+            squadron.missionTimer = Math.Max(0.8f, 2.2f - deck.EffectivePower * 0.3f);
+            squadron.phaseDuration = squadron.missionTimer;
+            var pilot = State.crew.Find(crew => crew.id == squadron.pilotCrewId);
+            if (pilot != null) pilot.onSortie = true;
+            AddLog("log.squadron_launch", squadron.displayKey);
+            return CommandResult.Ok("command.squadron_launched");
+        }
+
+        private void TickSquadrons(float dt)
+        {
+            var weather = ContentCatalog.GetWeather(State.currentWeather);
+            for (var i = 0; i < State.squadrons.Count; i++)
+            {
+                var squadron = State.squadrons[i];
+                if (squadron.status == SquadronStatus.Ready || squadron.status == SquadronStatus.Destroyed) continue;
+                squadron.missionTimer -= dt;
+                if (squadron.missionTimer > 0f) continue;
+
+                if (squadron.status == SquadronStatus.Launching)
+                {
+                    squadron.status = SquadronStatus.OnMission;
+                    squadron.missionTimer = 4.5f * weather.squadronTimeModifier;
+                    squadron.phaseDuration = squadron.missionTimer;
+                    AddLog("log.squadron_on_mission", squadron.displayKey);
+                    RaiseCombatAlert("alert.squadron_on_mission", squadron.displayKey, AlertSeverity.Info, false);
+                }
+                else if (squadron.status == SquadronStatus.OnMission)
+                {
+                    ResolveSquadronMission(squadron);
+                    if (squadron.status != SquadronStatus.Destroyed)
+                    {
+                        squadron.status = SquadronStatus.Recovering;
+                        squadron.missionTimer = 2.3f * weather.squadronTimeModifier;
+                        squadron.phaseDuration = squadron.missionTimer;
+                        AddLog("log.squadron_returning", squadron.displayKey);
+                        RaiseCombatAlert("alert.squadron_returning", squadron.displayKey, AlertSeverity.Info, false);
+                    }
+                }
+                else if (squadron.status == SquadronStatus.Recovering)
+                {
+                    squadron.status = SquadronStatus.Ready;
+                    squadron.mission = SquadronMission.None;
+                    squadron.phaseDuration = 0f;
+                    var pilot = State.crew.Find(crew => crew.id == squadron.pilotCrewId);
+                    if (pilot != null) pilot.onSortie = false;
+                    AddLog("log.squadron_recovered", squadron.displayKey);
+                    RaiseCombatAlert("alert.squadron_recovered", squadron.displayKey, AlertSeverity.Info, false);
+                }
+            }
+        }
+
+        private void ResolveSquadronMission(SquadronState squadron)
+        {
+            switch (squadron.mission)
+            {
+                case SquadronMission.Intercept:
+                    State.interceptCharges += 2;
+                    AddLog("log.intercept_ready", squadron.displayKey);
+                    break;
+                case SquadronMission.Bombard:
+                    ApplyDamage(State.enemyShip, squadron.targetSystem, 6f + squadron.strength, false);
+                    AddLog("log.bombardment", squadron.targetSystem.ToString());
+                    break;
+                case SquadronMission.Escort:
+                    State.playerShip.ward = Math.Min(State.playerShip.maxWard, State.playerShip.ward + 5f);
+                    State.interceptCharges++;
+                    AddLog("log.escort_ready", squadron.displayKey);
+                    break;
+                case SquadronMission.Recon:
+                    State.reconBonusSeconds = 15f;
+                    AddLog("log.recon_ready", squadron.displayKey);
+                    break;
+                case SquadronMission.Assault:
+                    var system = State.enemyShip.GetSystem(squadron.targetSystem);
+                    if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + 32f);
+                    State.enemyShip.hull = Math.Max(0f, State.enemyShip.hull - 1f);
+                    AddLog("log.assault", squadron.targetSystem.ToString());
+                    break;
+            }
+
+            var random = State.random.combat;
+            var enemyDeck = State.enemyShip?.GetSystem(ShipSystemType.FlightDeck);
+            var lossChance = 0.14f + (enemyDeck?.EffectivePower ?? 0) * 0.035f;
+            if (State.currentWeather == WeatherType.Turbulence || State.currentWeather == WeatherType.Icing) lossChance += 0.1f;
+            if (SeededRandom.Chance(ref random, lossChance))
+            {
+                squadron.strength--;
+                AddLog("log.squadron_damaged", squadron.displayKey);
+            }
+            State.random.combat = random;
+
+            if (squadron.strength <= 0)
+            {
+                squadron.strength = 0;
+                squadron.status = SquadronStatus.Destroyed;
+                var pilot = State.crew.Find(crew => crew.id == squadron.pilotCrewId);
+                if (pilot != null)
+                {
+                    pilot.onSortie = false;
+                    pilot.health = 0f;
+                    pilot.downedSeconds = 6f;
+                }
+                AddLog("log.squadron_destroyed", squadron.displayKey);
+                RaiseCombatAlert("alert.squadron_destroyed", squadron.displayKey, AlertSeverity.Critical, true);
+            }
+        }
+
+        private void EnemySquadronStrike()
+        {
+            var deck = State.enemyShip?.GetSystem(ShipSystemType.FlightDeck);
+            State.enemySquadronCooldown = State.isFinalBattle ? 10f : 14f;
+            if (deck == null || deck.EffectivePower <= 0) return;
+            if (State.interceptCharges > 0)
+            {
+                State.interceptCharges--;
+                AddLog("log.enemy_squadron_intercepted");
+                return;
+            }
+            ApplyDamage(State.playerShip, ShipSystemType.FlightDeck, 5f + deck.EffectivePower, false);
+            AddLog("log.enemy_squadron_hit");
+            RaiseCombatAlert("alert.enemy_airstrike", "", AlertSeverity.Warning, true);
+        }
+
+        private void ResolveWeatherHazard()
+        {
+            var profile = ContentCatalog.GetWeather(State.currentWeather);
+            State.weatherHazardTimer = profile.hazardInterval;
+            var random = State.random.combat;
+            switch (State.currentWeather)
+            {
+                case WeatherType.Thunderhead:
+                    State.playerShip.ward = Math.Max(0f, State.playerShip.ward - 3f);
+                    DamageRandomSystem(8f, ref random);
+                    AddLog("log.weather_thunder");
+                    RaiseCombatAlert("alert.thunder_strike", "", AlertSeverity.Warning, true);
+                    break;
+                case WeatherType.Turbulence:
+                    DamageRandomCrew(8f, ref random);
+                    AddLog("log.weather_turbulence");
+                    break;
+                case WeatherType.AetherCurrent:
+                    State.playerShip.instability = Clamp(State.playerShip.instability + 12f, 0f, 100f);
+                    State.playerShip.ward = Math.Min(State.playerShip.maxWard, State.playerShip.ward + 2f);
+                    AddLog("log.weather_aether");
+                    break;
+                case WeatherType.Icing:
+                    var lift = State.playerShip.GetSystem(ShipSystemType.LiftArray);
+                    if (lift != null) lift.damage = Math.Min(lift.maxDamage, lift.damage + 7f);
+                    AddLog("log.weather_icing");
+                    RaiseCombatAlert("alert.icing", ShipSystemType.LiftArray.ToString(), AlertSeverity.Warning, true);
+                    break;
+                case WeatherType.CloudCover:
+                    State.reconBonusSeconds = Math.Max(0f, State.reconBonusSeconds - 3f);
+                    AddLog("log.weather_cloud");
+                    break;
+            }
+            State.random.combat = random;
+        }
+
+        private void DamageRandomSystem(float amount, ref uint random)
+        {
+            var systems = State.playerShip.systems;
+            var target = systems[SeededRandom.Range(ref random, 0, systems.Count)];
+            target.damage = Math.Min(target.maxDamage, target.damage + amount);
+            var room = State.playerShip.GetRoom(target.type);
+            if (room != null) room.fire = Math.Min(100f, room.fire + amount);
+        }
+
+        private void DamageRandomCrew(float amount, ref uint random)
+        {
+            var active = State.crew.FindAll(crew => crew.IsActive);
+            if (active.Count == 0) return;
+            var crew = active[SeededRandom.Range(ref random, 0, active.Count)];
+            crew.health = Math.Max(0f, crew.health - amount);
+        }
+
+        public void ApplyDamage(ShipState defender, ShipSystemType target, float amount, bool ignoresWard)
+        {
+            if (defender == null || amount <= 0f) return;
+            var remaining = amount;
+            if (!ignoresWard && defender.ward > 0f)
+            {
+                var absorbed = Math.Min(defender.ward, remaining);
+                defender.ward -= absorbed;
+                remaining -= absorbed;
+            }
+            if (remaining > 0f && defender.armor > 0f)
+            {
+                var absorbed = Math.Min(defender.armor, remaining);
+                defender.armor -= absorbed;
+                remaining -= absorbed;
+            }
+            if (remaining <= 0f) return;
+
+            defender.hull = Math.Max(0f, defender.hull - remaining);
+            var system = defender.GetSystem(target);
+            if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + remaining * 12f);
+            var room = defender.GetRoom(target);
+            if (room != null)
+            {
+                var random = State.random.combat;
+                if (SeededRandom.Chance(ref random, 0.34f)) room.fire = Math.Min(100f, room.fire + remaining * 8f);
+                if (SeededRandom.Chance(ref random, 0.22f)) room.breach = Math.Min(100f, room.breach + remaining * 7f);
+                State.random.combat = random;
+            }
+            if (defender == State.playerShip)
+                RaiseCombatAlert("alert.hull_breached", target.ToString(), defender.hull <= defender.maxHull * 0.3f ? AlertSeverity.Critical : AlertSeverity.Warning, true);
+        }
+
+        public CommandResult UseSupportAbility()
+        {
+            if (State.convoy.supportCooldown > 0) return CommandResult.Fail("command.support_cooldown");
+            switch (State.convoy.supportShip)
+            {
+                case SupportShipType.Hospital:
+                    for (var i = 0; i < State.crew.Count; i++)
+                    {
+                        var crew = State.crew[i];
+                        if (crew.isDead || crew.onSortie) continue;
+                        if (crew.health <= 0f)
+                        {
+                            crew.health = crew.maxHealth * 0.3f;
+                            crew.downedSeconds = 0f;
+                        }
+                        else crew.health = Math.Min(crew.maxHealth, crew.health + 35f);
+                    }
+                    AddLog("log.support_hospital");
+                    break;
+                case SupportShipType.Workshop:
+                    State.playerShip.armor = Math.Min(State.playerShip.maxArmor, State.playerShip.armor + 6f);
+                    for (var i = 0; i < State.playerShip.systems.Count; i++)
+                        State.playerShip.systems[i].damage = Math.Max(0f, State.playerShip.systems[i].damage - 12f);
+                    AddLog("log.support_workshop");
+                    break;
+                case SupportShipType.Pathfinder:
+                    State.reconBonusSeconds = Math.Max(State.reconBonusSeconds, 25f);
+                    State.playerShip.ward = Math.Min(State.playerShip.maxWard, State.playerShip.ward + 4f);
+                    AddLog("log.support_pathfinder");
+                    break;
+            }
+            State.convoy.supportCooldown = 3;
+            return CommandResult.Ok("command.support_used");
+        }
+
+        public CommandResult FieldRepair()
+        {
+            if (State.phase != GamePhase.RouteMap) return CommandResult.Fail("command.invalid_phase");
+            if (State.resources.salvage < 5) return CommandResult.Fail("command.no_salvage");
+            State.resources.salvage -= 5;
+            State.playerShip.hull = Math.Min(State.playerShip.maxHull, State.playerShip.hull + 6f);
+            State.playerShip.armor = Math.Min(State.playerShip.maxArmor, State.playerShip.armor + 5f);
+            return CommandResult.Ok("command.field_repair");
+        }
+
+        public CommandResult RefitSquadrons()
+        {
+            if (State.phase != GamePhase.RouteMap) return CommandResult.Fail("command.invalid_phase");
+            if (State.resources.salvage < 4) return CommandResult.Fail("command.no_salvage");
+            var damaged = State.squadrons.Find(squadron => squadron.strength < squadron.maxStrength);
+            if (damaged == null) return CommandResult.Fail("command.no_squadron_damage");
+            State.resources.salvage -= 4;
+            damaged.strength++;
+            if (damaged.status == SquadronStatus.Destroyed)
+            {
+                damaged.status = SquadronStatus.Ready;
+                damaged.mission = SquadronMission.None;
+            }
+            return CommandResult.Ok("command.squadron_refit");
+        }
+
+        public CommandResult EmergencyOrdnanceAssembly()
+        {
+            if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
+            if (State.resources.ordnance > 0) return CommandResult.Fail("command.ordnance_remaining");
+
+            var remainingCost = 3;
+            var salvageSpent = Math.Min(State.resources.salvage, remainingCost);
+            State.resources.salvage -= salvageSpent;
+            remainingCost -= salvageSpent;
+            var suppliesSpent = Math.Min(State.resources.supplies, remainingCost);
+            State.resources.supplies -= suppliesSpent;
+            remainingCost -= suppliesSpent;
+            if (remainingCost > 0) State.convoy.survivors = Math.Max(0, State.convoy.survivors - remainingCost * 10);
+            State.resources.ordnance += 3;
+            State.convoy.morale = Math.Max(0, State.convoy.morale - 1 - remainingCost * 2);
+            State.playerShip.instability = Math.Min(100f, State.playerShip.instability + 8f + remainingCost * 4f);
+            AddLog("log.emergency_ordnance");
+            CheckDefeat();
+            return CommandResult.Ok("command.emergency_ordnance");
+        }
+
+        public CommandResult EmergencyAetherBurn()
+        {
+            if (State.phase != GamePhase.RouteMap) return CommandResult.Fail("command.invalid_phase");
+            if (HasAffordableRoute()) return CommandResult.Fail("command.not_stranded");
+            State.resources.aether += 2;
+            State.convoy.morale = Math.Max(0, State.convoy.morale - 6);
+            State.convoy.survivors = Math.Max(0, State.convoy.survivors - 12);
+            AddLog("log.emergency_aether");
+            CheckDefeat();
+            return CommandResult.Ok("command.emergency_aether");
+        }
+
+        private void ResolveVictory()
+        {
+            if (State.phase != GamePhase.Combat) return;
+            State.isPaused = true;
+            var reward = State.isFinalBattle ? 0 : (State.difficulty == Difficulty.Harsh ? 7 : 9);
+            State.resources.salvage += reward;
+            State.resources.ordnance += State.isFinalBattle ? 0 : 1;
+            for (var i = 0; i < State.crew.Count; i++) State.crew[i].onSortie = false;
+            if (State.isFinalBattle)
+            {
+                State.phase = GamePhase.Victory;
+                State.convoy.morale = Math.Min(100, State.convoy.morale + 10);
+                AddLog("log.gate_opened");
+            }
+            else
+            {
+                State.phase = GamePhase.RouteMap;
+                AddLog("log.combat_victory");
+            }
+        }
+
+        private void CheckDefeat()
+        {
+            if (State.phase == GamePhase.Defeat || State.phase == GamePhase.Victory) return;
+            if (State.playerShip == null || State.playerShip.IsDestroyed)
+            {
+                Lose(DefeatReason.FlagshipDestroyed);
+                return;
+            }
+            var captain = State.crew.Find(crew => crew.isCaptain);
+            if (captain == null || captain.isDead)
+            {
+                Lose(DefeatReason.CaptainLost);
+                return;
+            }
+            if (State.convoy.survivors <= 0)
+            {
+                Lose(DefeatReason.ConvoyLost);
+                return;
+            }
+            if (State.convoy.morale <= 0) Lose(DefeatReason.MoraleCollapsed);
+        }
+
+        private void Lose(DefeatReason reason)
+        {
+            State.defeatReason = reason;
+            State.phase = GamePhase.Defeat;
+            State.isPaused = true;
+            AddLog("log.defeat", reason.ToString());
+        }
+
+        private void RaiseCombatAlert(string key, string argument, AlertSeverity severity, bool canAutoPause)
+        {
+            // Never replace a critical warning with lower-priority sortie chatter.
+            if (State.combatAlertSeconds > 0f && State.combatAlertSeverity > severity) return;
+            State.combatAlertKey = key;
+            State.combatAlertArgument = argument ?? string.Empty;
+            State.combatAlertSeverity = severity;
+            State.combatAlertSeconds = severity == AlertSeverity.Info ? 2.8f : 5f;
+            State.combatAlertPausedBattle = canAutoPause && State.autoPauseOnWarning;
+            if (State.combatAlertPausedBattle) State.isPaused = true;
+        }
+
+        private void ClearCombatAlert()
+        {
+            State.combatAlertKey = string.Empty;
+            State.combatAlertArgument = string.Empty;
+            State.combatAlertSeconds = 0f;
+            State.combatAlertPausedBattle = false;
+        }
+
+        private void AddLog(string key, string argument = "")
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            State.combatLog.Add(new CombatLogEntry(key, argument));
+            if (State.combatLog.Count > 8) State.combatLog.RemoveAt(0);
+        }
+
+        private static float Clamp(float value, float min, float max)
+        {
+            return Math.Max(min, Math.Min(max, value));
+        }
+
+        private static int ClampInt(int value, int min, int max)
+        {
+            return Math.Max(min, Math.Min(max, value));
+        }
+    }
+}
