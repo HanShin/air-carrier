@@ -191,9 +191,14 @@ internal static class HeadlessPlaythrough
         {
             var choice = encounter.choices[i];
             if (!simulation.CanChoose(choice)) continue;
-            var score = choice.moraleDelta * 3 + choice.survivorDelta / 10 + choice.aetherDelta * 4 + choice.suppliesDelta * 3 + choice.salvageDelta;
-            score -= choice.aetherCost * 5 + choice.suppliesCost * 3 + choice.salvageCost;
-            if (choice.startsBattle) score -= 12;
+            var score = OutcomeScore(choice) - (choice.aetherCost * 5 + choice.suppliesCost * 3 + choice.salvageCost);
+            if (choice.successChance < 1f)
+            {
+                var failure = encounter.choices.Find(item => item.id == choice.failureChoiceId);
+                if (failure != null)
+                    score = (int)Math.Round(OutcomeScore(choice) * choice.successChance + OutcomeScore(failure) * (1f - choice.successChance))
+                            - (choice.aetherCost * 5 + choice.suppliesCost * 3 + choice.salvageCost);
+            }
             if (score > bestScore)
             {
                 best = choice;
@@ -202,6 +207,14 @@ internal static class HeadlessPlaythrough
         }
         if (best == null) simulation.SkipEncounter();
         else simulation.ChooseEncounter(best.id);
+    }
+
+    private static int OutcomeScore(EncounterChoiceDefinition outcome)
+    {
+        var score = outcome.moraleDelta * 3 + outcome.survivorDelta / 10 + outcome.aetherDelta * 4 + outcome.suppliesDelta * 3 + outcome.salvageDelta
+                    + (int)outcome.hullDelta * 2 + (int)outcome.armorDelta - (int)outcome.instabilityDelta / 5 + (outcome.refitSquadrons ? 6 : 0);
+        if (outcome.startsBattle) score -= outcome.battleTier >= 2 ? 20 : 12;
+        return score;
     }
 
     private static float ResolveCombat(GameSimulation simulation)

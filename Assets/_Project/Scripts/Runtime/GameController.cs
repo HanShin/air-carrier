@@ -71,11 +71,29 @@ namespace AetherArk.Runtime
             return true;
         }
 
+        /// <summary>`-debug-event <id>` opens the given encounter on a post-tutorial run.</summary>
+        private bool TryDebugEventLaunch(string[] args)
+        {
+            var index = Array.IndexOf(args, "-debug-event");
+            if (index < 0) return false;
+            var id = index + 1 < args.Length ? args[index + 1] : "burning_ferry";
+            if (ContentCatalog.GetEncounter(id) == null) return false;
+            Profile.tutorialSeen = true;
+            Simulation = GameSimulation.NewRun(Profile, 41234);
+            Simulation.State.phase = GamePhase.Encounter;
+            Simulation.State.activeEncounterId = id;
+            Screen = FrontendScreen.Game;
+            previousPhase = Simulation.State.phase;
+            view.ShowGamePhase();
+            return true;
+        }
+
         private void TryDebugCombatLaunch()
         {
             if (!Debug.isDebugBuild) return;
             var args = Environment.GetCommandLineArgs();
             if (TryDebugRouteLaunch(args)) return;
+            if (TryDebugEventLaunch(args)) return;
             var index = Array.IndexOf(args, "-debug-combat");
             if (index < 0) return;
             var wanted = index + 1 < args.Length && !args[index + 1].StartsWith("-") ? args[index + 1].ToLowerInvariant() : "cutter";
@@ -168,9 +186,12 @@ namespace AetherArk.Runtime
                 case GamePhase.Encounter:
                     var encounter = Simulation.ActiveEncounter;
                     if (encounter == null) break;
-                    for (var i = 0; i < encounter.choices.Count && i < 9; i++)
+                    var visibleIndex = 0;
+                    for (var i = 0; i < encounter.choices.Count && visibleIndex < 9; i++)
                     {
-                        if (!Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i))) continue;
+                        if (encounter.choices[i].hidden) continue;
+                        var slot = visibleIndex++;
+                        if (!Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + slot))) continue;
                         if (Simulation.CanChoose(encounter.choices[i])) ChooseEncounter(encounter.choices[i].id);
                         return true;
                     }

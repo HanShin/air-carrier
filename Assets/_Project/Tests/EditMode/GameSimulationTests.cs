@@ -681,6 +681,176 @@ namespace AetherArk.Tests
             Assert.That(enemy.ward, Is.EqualTo(afterHit).Within(0.001f));
         }
 
+        private static readonly EncounterType[] EventTypes =
+            { EncounterType.Rescue, EncounterType.Salvage, EncounterType.Trade, EncounterType.Checkpoint, EncounterType.Storm };
+
+        [Test]
+        public void EventLibrary_HasAtLeastTenEventsPerType()
+        {
+            foreach (var type in EventTypes)
+                Assert.That(ContentCatalog.EncounterIds(type).Count, Is.GreaterThanOrEqualTo(10), type.ToString());
+        }
+
+        [Test]
+        public void EventLibrary_EveryEventIsLocalizedAndStructurallyValid()
+        {
+            var ko = new LocalizationService(Language.Korean);
+            var en = new LocalizationService(Language.English);
+            void Localized(string key, string context)
+            {
+                Assert.That(ko.T(key), Is.Not.EqualTo(key), context + " missing Korean " + key);
+                Assert.That(en.T(key), Is.Not.EqualTo(key), context + " missing English " + key);
+                Assert.That(ko.T(key), Is.Not.EqualTo(en.T(key)), context + " has identical ko/en text for " + key);
+            }
+
+            foreach (var type in EventTypes)
+            foreach (var id in ContentCatalog.EncounterIds(type))
+            {
+                var encounter = ContentCatalog.GetEncounter(id);
+                Assert.That(encounter, Is.Not.Null, id);
+                Assert.That(encounter.type, Is.EqualTo(type), id);
+                Localized(encounter.titleKey, id);
+                Localized(encounter.bodyKey, id);
+                var visible = encounter.choices.FindAll(choice => !choice.hidden);
+                Assert.That(visible.Count, Is.InRange(2, 4), id + " visible choices");
+                Assert.That(visible.Exists(choice => choice.aetherCost == 0 && choice.suppliesCost == 0 && choice.ordnanceCost == 0 && choice.salvageCost == 0 && string.IsNullOrEmpty(choice.requiredTag)),
+                    Is.True, id + " needs a free, untagged choice");
+                foreach (var choice in encounter.choices)
+                {
+                    Localized(choice.textKey, id + "/" + choice.id);
+                    Localized(choice.resultKey, id + "/" + choice.id);
+                    Assert.That(choice.successChance, Is.GreaterThan(0f).And.LessThanOrEqualTo(1f), id + "/" + choice.id);
+                    if (choice.successChance < 1f)
+                    {
+                        var failure = encounter.choices.Find(item => item.id == choice.failureChoiceId);
+                        Assert.That(failure, Is.Not.Null, id + "/" + choice.id + " failure choice missing");
+                        Assert.That(failure.hidden, Is.True, id + "/" + choice.id + " failure choice must be hidden");
+                    }
+                    if (choice.hidden) Assert.That(choice.successChance, Is.EqualTo(1f), id + "/" + choice.id + " hidden choices cannot gamble");
+                }
+            }
+        }
+
+        [Test]
+        public void HiddenChoices_CannotBeChosen()
+        {
+            var simulation = GameSimulation.NewRun(Profile(), 3);
+            simulation.State.phase = GamePhase.Encounter;
+            simulation.State.activeEncounterId = "burning_ferry";
+            var hidden = simulation.ActiveEncounter.choices.Find(choice => choice.hidden);
+            Assert.That(hidden, Is.Not.Null);
+            Assert.That(simulation.CanChoose(hidden), Is.False);
+            Assert.That(simulation.ChooseEncounter(hidden.id).success, Is.False);
+        }
+
+        [Test]
+        public void Gamble_AppliesTheHiddenFailureChoiceWhenTheRollFails()
+        {
+            var sawSuccess = false;
+            var sawFailure = false;
+            for (var seed = 1; seed < 200 && !(sawSuccess && sawFailure); seed++)
+            {
+                var simulation = GameSimulation.NewRun(Profile(), seed);
+                simulation.State.phase = GamePhase.Encounter;
+                simulation.State.activeEncounterId = "burning_ferry";
+                var gamble = simulation.ActiveEncounter.choices.Find(choice => choice.successChance < 1f);
+                var failure = simulation.ActiveEncounter.choices.Find(choice => choice.id == gamble.failureChoiceId);
+                var hullBefore = simulation.State.playerShip.hull;
+                var survivorsBefore = simulation.State.convoy.survivors;
+
+                var result = simulation.ChooseEncounter(gamble.id);
+                Assert.That(result.success, Is.True);
+                if (result.messageKey == failure.resultKey)
+                {
+                    sawFailure = true;
+                    Assert.That(simulation.State.playerShip.hull, Is.EqualTo(hullBefore + failure.hullDelta).Within(0.001f));
+                    Assert.That(simulation.State.convoy.survivors, Is.EqualTo(survivorsBefore + failure.survivorDelta));
+                }
+                else
+                {
+                    sawSuccess = true;
+                    Assert.That(result.messageKey, Is.EqualTo(gamble.resultKey));
+                    Assert.That(simulation.State.convoy.survivors, Is.EqualTo(survivorsBefore + gamble.survivorDelta));
+                }
+            }
+            Assert.That(sawSuccess && sawFailure, Is.True, "both gamble outcomes should occur across seeds");
+        }
+
+        [Test]
+        public void ChoiceEffects_RepairRefitInstabilityAndEliteBattleApply()
+        {
+            var simulation = GameSimulation.NewRun(Profile(), 8);
+            var state = simulation.State;
+            state.playerShip.hull -= 10f;
+            state.playerShip.armor -= 10f;
+            state.playerShip.instability = 40f;
+            state.squadrons[0].strength = 1;
+            state.phase = GamePhase.Encounter;
+            state.activeEncounterId = "refit_yard";
+            var refit = simulation.ActiveEncounter.choices.Find(choice => choice.refitSquadrons);
+            Assert.That(refit, Is.Not.Null);
+            state.resources.salvage = 50;
+            Assert.That(simulation.ChooseEncounter(refit.id).success, Is.True);
+            Assert.That(state.squadrons[0].strength, Is.EqualTo(state.squadrons[0].maxStrength));
+
+            state.phase = GamePhase.Encounter;
+            state.activeEncounterId = "refit_yard";
+            var plating = simulation.ActiveEncounter.choices.Find(choice => choice.armorDelta > 0);
+            var armorBefore = state.playerShip.armor;
+            Assert.That(simulation.ChooseEncounter(plating.id).success, Is.True);
+            Assert.That(state.playerShip.armor, Is.EqualTo(Math.Min(state.playerShip.maxArmor, armorBefore + plating.armorDelta)).Within(0.001f));
+
+            state.phase = GamePhase.Encounter;
+            state.activeEncounterId = "ion_squall";
+            var calm = simulation.ActiveEncounter.choices.Find(choice => choice.instabilityDelta < 0);
+            state.resources.aether = 10;
+            Assert.That(simulation.ChooseEncounter(calm.id).success, Is.True);
+            Assert.That(state.playerShip.instability, Is.EqualTo(40f + calm.instabilityDelta).Within(0.001f));
+
+            state.phase = GamePhase.Encounter;
+            state.activeEncounterId = "blockade_toll";
+            var fight = simulation.ActiveEncounter.choices.Find(choice => !choice.hidden && choice.startsBattle && choice.battleTier >= 2);
+            Assert.That(fight, Is.Not.Null, "blockade_toll should offer an elite fight");
+            Assert.That(simulation.ChooseEncounter(fight.id).success, Is.True);
+            Assert.That(state.phase, Is.EqualTo(GamePhase.Combat));
+            Assert.That(state.enemyShip.id, Is.EqualTo("enemy_cruiser").Or.EqualTo("enemy_monitor"));
+        }
+
+        [Test]
+        public void EventAssignment_IsDeterministicAndAvoidsRepeatsAfterTheTutorial()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var first = GameSimulation.NewRun(profile, 777).State.routeNodes;
+            var second = GameSimulation.NewRun(profile, 777).State.routeNodes;
+            for (var i = 0; i < first.Count; i++) Assert.That(first[i].encounterId, Is.EqualTo(second[i].encounterId));
+
+            foreach (var type in EventTypes)
+            {
+                var ids = first.FindAll(node => node.encounterType == type).ConvertAll(node => node.encounterId);
+                var pool = ContentCatalog.EncounterIds(type).Count;
+                var distinct = new System.Collections.Generic.HashSet<string>(ids);
+                Assert.That(distinct.Count, Is.EqualTo(Math.Min(ids.Count, pool)), type + " repeats an event before exhausting its pool");
+            }
+            var baseline = new[] { "drifting_refugees", "ruined_dock", "free_port", "imperial_checkpoint", "storm_eye" };
+            Assert.That(first.Exists(node => node.encounterId != null && node.encounterId.Length > 0 && Array.IndexOf(baseline, node.encounterId) < 0 && Array.IndexOf(EventTypes, node.encounterType) >= 0),
+                Is.True, "a post-tutorial run should include at least one non-baseline event");
+        }
+
+        [Test]
+        public void EventAssignment_FirstExpeditionKeepsBaselineEvents()
+        {
+            var profile = Profile(Difficulty.Story);
+            profile.tutorialSeen = false;
+            var nodes = GameSimulation.NewRun(profile, GameSimulation.FirstExpeditionSeed).State.routeNodes;
+            var baseline = new[] { "drifting_refugees", "ruined_dock", "free_port", "imperial_checkpoint", "storm_eye" };
+            foreach (var node in nodes)
+            {
+                if (Array.IndexOf(EventTypes, node.encounterType) < 0) continue;
+                Assert.That(baseline, Does.Contain(node.encounterId), node.id);
+            }
+        }
+
         [TestCase(WeatherType.Thunderhead, -0.08f)]
         [TestCase(WeatherType.Turbulence, -0.12f)]
         [TestCase(WeatherType.AetherCurrent, 0.04f)]

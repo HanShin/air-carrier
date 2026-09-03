@@ -401,14 +401,20 @@ namespace AetherArk.Runtime
             ui.Text("EncounterBody", panel, l10n.T(encounter.bodyKey), 24, UiFactory.TextPrimary, TextAnchor.UpperLeft,
                 new Vector2(70f, 390f), new Vector2(1160f, 210f));
 
+            var slot = 0;
             for (var i = 0; i < encounter.choices.Count; i++)
             {
                 var choice = encounter.choices[i];
+                if (choice.hidden) continue;
                 var localChoice = choice;
-                var button = ui.Button("Choice_" + choice.id, panel, $"[{i + 1}] " + l10n.T(choice.textKey), () => controller.ChooseEncounter(localChoice.id),
-                    new Vector2(70f, 292f - i * 82f), new Vector2(1160f, 64f), i == 0 ? new Color(0.13f, 0.34f, 0.36f, 0.98f) : UiFactory.PanelSoft,
+                var label = $"[{slot + 1}] " + l10n.T(choice.textKey);
+                if (choice.successChance < 1f) label += $"   ({l10n.T("ui.chance", Mathf.RoundToInt(choice.successChance * 100f).ToString())})";
+                var button = ui.Button("Choice_" + choice.id, panel, label, () => controller.ChooseEncounter(localChoice.id),
+                    new Vector2(70f, 292f - slot * 82f), new Vector2(1160f, 64f),
+                    choice.successChance < 1f ? new Color(0.36f, 0.22f, 0.1f, 0.98f) : slot == 0 ? new Color(0.13f, 0.34f, 0.36f, 0.98f) : UiFactory.PanelSoft,
                     UiFactory.TextPrimary, 19);
                 button.interactable = controller.Simulation.CanChoose(choice);
+                slot++;
             }
             AddLastReport(new Vector2(540f, 52f), new Vector2(840f, 72f));
         }

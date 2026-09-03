@@ -4,7 +4,7 @@ using AetherArk.Core;
 
 namespace AetherArk.Content
 {
-    public sealed class LocalizationService
+    public sealed partial class LocalizationService
     {
         private readonly Dictionary<string, string> korean = new Dictionary<string, string>();
         private readonly Dictionary<string, string> english = new Dictionary<string, string>();
@@ -45,6 +45,7 @@ namespace AetherArk.Content
 
         private void AddStrings()
         {
+            AddEncounterStrings();
             Add("game.title", "에테르 아크", "AETHER ARK");
             Add("game.subtitle", "천공 피난선단 지휘 프로토타입", "Sky Convoy Command Prototype");
             Add("menu.new_run", "새 원정", "New Expedition");
@@ -96,6 +97,7 @@ namespace AetherArk.Content
             Add("ui.current", "현재 위치", "CURRENT");
             Add("ui.blocked", "폭풍 봉쇄", "STORMED");
             Add("ui.depart", "출항", "Depart");
+            Add("ui.chance", "성공 {0}%", "{0}% chance");
             Add("ui.route_select_hint", "노드를 클릭해 항로를 확인하고 출항하십시오.", "Click a node to inspect it, then depart.");
             Add("ui.route_preview_empty", "선택된 항로 없음", "No route selected");
             Add("ui.storm_front", "폭풍전선", "STORM FRONT");

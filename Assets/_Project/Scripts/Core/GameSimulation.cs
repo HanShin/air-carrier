@@ -35,6 +35,8 @@ namespace AetherArk.Core
                 }
             };
 
+            if (profile.tutorialSeen) ContentCatalog.AssignEncounterVariants(state.routeNodes, seed);
+
             if (profile.difficulty == Difficulty.Story)
             {
                 state.resources.aether += 3;
@@ -125,7 +127,7 @@ namespace AetherArk.Core
 
         public bool CanChoose(EncounterChoiceDefinition choice)
         {
-            if (choice == null || State.phase != GamePhase.Encounter) return false;
+            if (choice == null || choice.hidden || State.phase != GamePhase.Encounter) return false;
             if (State.resources.aether < choice.aetherCost) return false;
             if (State.resources.supplies < choice.suppliesCost) return false;
             if (State.resources.ordnance < choice.ordnanceCost) return false;
@@ -139,23 +141,60 @@ namespace AetherArk.Core
             var choice = encounter?.choices.Find(item => item.id == choiceId);
             if (!CanChoose(choice)) return CommandResult.Fail("command.choice_unavailable");
 
-            State.resources.aether += choice.aetherDelta - choice.aetherCost;
-            State.resources.supplies += choice.suppliesDelta - choice.suppliesCost;
-            State.resources.ordnance += choice.ordnanceDelta - choice.ordnanceCost;
-            State.resources.salvage += choice.salvageDelta - choice.salvageCost;
-            State.convoy.survivors = Math.Max(0, State.convoy.survivors + choice.survivorDelta);
-            State.convoy.morale = ClampInt(State.convoy.morale + choice.moraleDelta, 0, 100);
-            AddLog(choice.resultKey);
+            var outcome = choice;
+            if (choice.successChance < 1f)
+            {
+                var random = State.random.events;
+                var success = SeededRandom.Chance(ref random, choice.successChance);
+                State.random.events = random;
+                if (!success)
+                {
+                    var failure = encounter.choices.Find(item => item.id == choice.failureChoiceId);
+                    if (failure != null) outcome = failure;
+                }
+            }
 
-            if (choice.id == "repair") RepairAtPort();
-            if (choice.id == "high") State.playerShip.altitude = AltitudeBand.High;
-            if (choice.id == "ride") State.playerShip.instability = Math.Max(0f, State.playerShip.instability - 20f);
+            // Costs are always paid by the chosen option; rewards come from the resolved outcome.
+            State.resources.aether -= choice.aetherCost;
+            State.resources.supplies -= choice.suppliesCost;
+            State.resources.ordnance -= choice.ordnanceCost;
+            State.resources.salvage -= choice.salvageCost;
+            ApplyOutcome(outcome);
+            AddLog(outcome.resultKey);
 
             State.activeEncounterId = null;
-            if (choice.startsBattle) BeginCombat(1, false);
+            if (outcome.startsBattle) BeginCombat(Math.Max(1, outcome.battleTier), false);
             else State.phase = GamePhase.RouteMap;
             CheckDefeat();
-            return CommandResult.Ok(choice.resultKey);
+            return CommandResult.Ok(outcome.resultKey);
+        }
+
+        private void ApplyOutcome(EncounterChoiceDefinition outcome)
+        {
+            State.resources.aether += outcome.aetherDelta;
+            State.resources.supplies += outcome.suppliesDelta;
+            State.resources.ordnance += outcome.ordnanceDelta;
+            State.resources.salvage += outcome.salvageDelta;
+            State.convoy.survivors = Math.Max(0, State.convoy.survivors + outcome.survivorDelta);
+            State.convoy.morale = ClampInt(State.convoy.morale + outcome.moraleDelta, 0, 100);
+
+            var ship = State.playerShip;
+            if (outcome.hullDelta != 0f) ship.hull = Clamp(ship.hull + outcome.hullDelta, 0f, ship.maxHull);
+            if (outcome.armorDelta != 0f) ship.armor = Clamp(ship.armor + outcome.armorDelta, 0f, ship.maxArmor);
+            if (outcome.instabilityDelta != 0f) ship.instability = Clamp(ship.instability + outcome.instabilityDelta, 0f, 100f);
+            if (outcome.refitSquadrons)
+            {
+                for (var i = 0; i < State.squadrons.Count; i++)
+                {
+                    var squadron = State.squadrons[i];
+                    squadron.strength = squadron.maxStrength;
+                    if (squadron.status == SquadronStatus.Destroyed) squadron.status = SquadronStatus.Ready;
+                }
+            }
+
+            if (outcome.id == "repair") RepairAtPort();
+            if (outcome.id == "high") ship.altitude = AltitudeBand.High;
+            if (outcome.id == "ride") ship.instability = Math.Max(0f, ship.instability - 20f);
         }
 
         public CommandResult SkipEncounter()

@@ -23,6 +23,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - Low/mid/high altitude, six weather profiles, support ships, convoy population/morale, field repairs, and squadron refits.
 - Deterministic route/combat/event random streams and versioned atomic profile/run saves.
 - Last-resort aether and ordnance recovery so a depleted resource cannot silently soft-lock an expedition.
+- Fifty authored events (ten per non-combat encounter type) in Korean and English, drawn per node without repeats from the second expedition onward; the locked first expedition keeps its five baseline events. Choices can be gambles with a stated success chance and a hidden failure outcome, gate on lineage or support-ship tags, and repair, reinforce, refit wings, shift core instability or start elite battles. Events are authored in `tools/gen_events.py`, which generates `EncounterLibrary.cs` and `LocalizationService.Encounters.cs` together so ids and strings cannot drift.
 - Korean and English authored content for the vertical slice.
 
 The 1.0 targets in the original plan—three flagships, six regions, 100+ events, 12 enemy silhouettes, 18 weapons, nine wings, and roughly 30 modules—remain production content. The current repository is the intended first vertical slice and architecture foundation, not a claim that the multi-year 1.0 content set is complete.
@@ -43,7 +44,7 @@ Keyboard access for the current slice:
 
 Emergency ordnance first consumes salvage, then supplies, then lives. It adds instability and costs morale, but guarantees that an empty magazine cannot permanently trap a run in combat.
 
-Development builds accept `-debug-combat [cutter|carrier|scout|boarder|cruiser|monitor]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation. `-debug-route [jumps]` opens the route map after auto-resolving that many jumps so storm bands and visited nodes are visible.
+Development builds accept `-debug-combat [cutter|carrier|scout|boarder|cruiser|monitor]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation. `-debug-route [jumps]` opens the route map after auto-resolving that many jumps so storm bands and visited nodes are visible. `-debug-event <id>` opens one authored event directly.
 
 Default pause is `Space`; it can be changed to `P` during expedition setup. Save files are written under `Application.persistentDataPath` as `profile.json` and `suspended_run.json`.
 

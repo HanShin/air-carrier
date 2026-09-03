@@ -210,6 +210,17 @@ namespace AetherArk.Core
         public int moraleDelta;
         public bool startsBattle;
         public string requiredTag;
+        public float hullDelta;
+        public float armorDelta;
+        public float instabilityDelta;
+        public bool refitSquadrons;
+        public int battleTier = 1;
+        /// <summary>1 = deterministic. Below 1 the choice is a gamble resolved on the events RNG stream.</summary>
+        public float successChance = 1f;
+        /// <summary>Hidden choice in the same encounter applied when the gamble fails.</summary>
+        public string failureChoiceId;
+        /// <summary>Never shown or selectable; exists as a failure outcome.</summary>
+        public bool hidden;
     }
 
     [Serializable]

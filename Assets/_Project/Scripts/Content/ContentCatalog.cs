@@ -426,6 +426,41 @@ namespace AetherArk.Content
             return !string.IsNullOrEmpty(id) && Encounters.TryGetValue(id, out var value) ? value : null;
         }
 
+        /// <summary>Authored event ids for a type, in a stable order (baseline event first).</summary>
+        public static List<string> EncounterIds(EncounterType type)
+        {
+            var ids = new List<string>();
+            var baseline = EncounterIdFor(type);
+            if (!string.IsNullOrEmpty(baseline) && Encounters.ContainsKey(baseline)) ids.Add(baseline);
+            foreach (var pair in Encounters)
+                if (pair.Value.type == type && pair.Key != baseline) ids.Add(pair.Key);
+            return ids;
+        }
+
+        /// <summary>
+        /// Replaces the baseline event on every non-combat node with a draw from that type's pool,
+        /// without replacement until the pool is exhausted. Uses its own RNG stream so route rolls stay intact.
+        /// </summary>
+        public static void AssignEncounterVariants(List<RouteNodeState> nodes, int seed)
+        {
+            var random = SeededRandom.Seed(seed, 0x5E1EC7u);
+            var pools = new Dictionary<EncounterType, List<string>>();
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                var node = nodes[i];
+                var all = EncounterIds(node.encounterType);
+                if (all.Count == 0) continue;
+                if (!pools.TryGetValue(node.encounterType, out var pool) || pool.Count == 0)
+                {
+                    pool = new List<string>(all);
+                    pools[node.encounterType] = pool;
+                }
+                var index = SeededRandom.Range(ref random, 0, pool.Count);
+                node.encounterId = pool[index];
+                pool.RemoveAt(index);
+            }
+        }
+
         public static WeatherProfile GetWeather(WeatherType type)
         {
             switch (type)
@@ -448,6 +483,7 @@ namespace AetherArk.Content
         private static Dictionary<string, EncounterDefinition> BuildEncounters()
         {
             var result = new Dictionary<string, EncounterDefinition>();
+            EncounterLibrary.AddAll(result);
 
             result["drifting_refugees"] = new EncounterDefinition
             {
