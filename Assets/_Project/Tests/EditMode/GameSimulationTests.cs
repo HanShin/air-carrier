@@ -959,7 +959,7 @@ namespace AetherArk.Tests
             Assert.That(state.combatLog.Exists(entry => entry.key == "log.region_cleared"), Is.True);
             Assert.That(state.playerShip.hull, Is.EqualTo(state.playerShip.maxHull).Within(0.001f), "port stop should fully repair the hull");
             Assert.That(state.playerShip.coreOutput, Is.EqualTo(12 + 1), "each cleared region should grow the core output");
-            Assert.That(state.playerShip.maxHull, Is.EqualTo(maxHullBefore + 4f).Within(0.001f), "each cleared region should grow the hull");
+            Assert.That(state.playerShip.maxHull, Is.EqualTo(maxHullBefore + 3f).Within(0.001f), "each cleared region should grow the hull");
             Assert.That(state.playerShip.AllocatedPower(), Is.LessThanOrEqualTo(state.playerShip.coreOutput));
             Assert.That(state.resources.ordnance, Is.GreaterThanOrEqualTo(8));
         }
@@ -1026,6 +1026,45 @@ namespace AetherArk.Tests
             {
                 if (Directory.Exists(root)) Directory.Delete(root, true);
             }
+        }
+
+        [Test]
+        public void GateReinforcement_GrowsWithTheRegion()
+        {
+            var profile = Profile(Difficulty.Story);
+            profile.tutorialSeen = false; // baseline ships only, so the bonus is measurable
+            var regular = GameSimulation.NewRun(profile, 21);
+            regular.BeginCombat(2, false);
+            var baseHull = regular.State.enemyShip.maxHull;
+
+            var firstGate = GameSimulation.NewRun(profile, 21);
+            firstGate.BeginCombat(2, true);
+            var firstBonus = firstGate.State.enemyShip.maxHull - baseHull;
+            Assert.That(firstBonus, Is.EqualTo(6f).Within(0.001f), "the first gate should be only lightly reinforced");
+
+            var lateGate = GameSimulation.NewRun(profile, 21);
+            lateGate.State.regionIndex = 3;
+            lateGate.BeginCombat(2, true);
+            var scaledBase = baseHull * ContentCatalog.GetRegion(3).enemyStatMultiplier;
+            Assert.That(lateGate.State.enemyShip.maxHull - scaledBase, Is.EqualTo(10f).Within(0.1f), "later gates gain more reinforcement on top of region scaling");
+        }
+
+        [Test]
+        public void EnemyFirepower_ScalesWithTheRegion()
+        {
+            var profile = Profile(Difficulty.Standard);
+            profile.tutorialSeen = false; // always the cutter
+            var early = GameSimulation.NewRun(profile, 33);
+            early.BeginCombat(1, false);
+            var late = GameSimulation.NewRun(profile, 33);
+            late.State.regionIndex = 3;
+            late.BeginCombat(1, false);
+
+            var earlyShot = early.EnemyShotDamage();
+            var lateShot = late.EnemyShotDamage();
+            Assert.That(earlyShot, Is.GreaterThan(0f));
+            Assert.That(lateShot, Is.EqualTo(earlyShot * ContentCatalog.GetRegion(3).enemyStatMultiplier).Within(0.01f),
+                "enemy shot damage must follow the region multiplier, not just enemy hull");
         }
 
         [TestCase(WeatherType.Thunderhead, -0.08f)]

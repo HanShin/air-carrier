@@ -40,3 +40,15 @@ The autoplayer plays the whole campaign. Reported jumps use `totalTravelCount`; 
 ## Addendum: campaign balance
 
 The first campaign audit won 0/99 Standard runs and stalled against region-2 monitors (a missed shot let the 3.5 s recharge delay lapse). Changes: ward recharge delay 6 s; enemy multipliers 1.08/1.16/1.24; the port stop now fully repairs the hull, grows the flagship (+4 hull, +3 armor, +2 ward, +1 core output routed to weapons) and tops resources up to at least their starting values; victories in regions 3–4 award 2 ordnance.
+
+## Addendum: balance pass from the report tool (step 4)
+
+`--report` showed an inverted curve: on Standard 44 of 54 losses fell in region 1 and regions 3–4 had 99–100% battle win rates, because region scaling touched only defensive stats while port refits grew the flagship. Changes:
+
+- Enemy firepower now scales with the region multiplier (`EnemyShotDamage`, air strikes, boarding party size), with base shot damage 2.4 + 0.5 × power.
+- Region multipliers 1.0 / 1.1 / 1.32 / 1.5; gate reinforcement 6/3/2 in region 1 growing +2/+1/+1 per region; port refit +3 hull, +2 armor, +2 ward, +1 core.
+- Tier-1 ships were harmless (0.1 hull lost per battle): cutter weapons 3, scout weapons 2, boarding parties of 3 (4 from region 3).
+
+Two further probes: giving the bulwark monitor a flight deck made it deadlier than the cruiser (Standard fell to 19%) and was reverted; softening strike damage to 4 + power pushed Standard to 53% and was reverted. The monitor keeps sensors 2 as its identity (accurate gun platform, no strikes).
+
+Final (100 runs each): Standard 35% with losses 32/10/7/16 by region, Story 71%, Harsh 14%, locked seed wins, no stalemates. Residual imbalance: monitor gate 93% vs cruiser gate 70% for the autoplayer; left for human playtesting.

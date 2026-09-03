@@ -245,12 +245,14 @@ namespace AetherArk.Core
             }
             if (finalBattle)
             {
-                State.enemyShip.maxHull += 10f;
-                State.enemyShip.hull += 10f;
-                State.enemyShip.maxArmor += 6f;
-                State.enemyShip.armor += 6f;
-                State.enemyShip.maxWard += 4f;
-                State.enemyShip.ward += 4f;
+                // The first gate is only lightly reinforced; later gates stack more on top of region scaling.
+                var step = Math.Max(0, State.regionIndex - 1);
+                var hullBonus = 6f + 2f * step;
+                var armorBonus = 3f + step;
+                var wardBonus = 2f + step;
+                State.enemyShip.maxHull += hullBonus; State.enemyShip.hull += hullBonus;
+                State.enemyShip.maxArmor += armorBonus; State.enemyShip.armor += armorBonus;
+                State.enemyShip.maxWard += wardBonus; State.enemyShip.ward += wardBonus;
             }
             State.random.combat = combatState;
             State.phase = GamePhase.Combat;
@@ -543,9 +545,18 @@ namespace AetherArk.Core
                 return;
             }
 
-            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.78f : State.difficulty == Difficulty.Harsh ? 1.22f : 1f;
-            ApplyDamage(State.playerShip, target, (2.6f + weapons.EffectivePower * 0.5f) * difficultyMultiplier, false);
+            ApplyDamage(State.playerShip, target, EnemyShotDamage(), false);
             AddLog("log.enemy_hit", target.ToString());
+        }
+
+        /// <summary>Enemy main-battery damage: base by weapon power, scaled by difficulty and by the region multiplier.</summary>
+        public float EnemyShotDamage()
+        {
+            var weapons = State.enemyShip?.GetSystem(ShipSystemType.Weapons);
+            if (weapons == null) return 0f;
+            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.78f : State.difficulty == Difficulty.Harsh ? 1.22f : 1f;
+            var regionMultiplier = ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
+            return (2.4f + weapons.EffectivePower * 0.5f) * difficultyMultiplier * regionMultiplier;
         }
 
         private float Accuracy(ShipState attacker, ShipState defender, bool playerAttack)
@@ -709,12 +720,13 @@ namespace AetherArk.Core
                 AddLog(State.enemyShip.boardingCapable ? "log.boarders_repelled" : "log.enemy_squadron_intercepted");
                 return;
             }
+            var regionMultiplier = ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
             if (State.enemyShip.boardingCapable)
             {
-                LandBoarders(2);
+                LandBoarders(State.regionIndex >= 3 ? 4 : 3);
                 return;
             }
-            ApplyDamage(State.playerShip, ShipSystemType.FlightDeck, 5f + deck.EffectivePower, false);
+            ApplyDamage(State.playerShip, ShipSystemType.FlightDeck, (5f + deck.EffectivePower) * regionMultiplier, false);
             AddLog("log.enemy_squadron_hit");
             RaiseCombatAlert("alert.enemy_airstrike", "", AlertSeverity.Warning, true);
         }
@@ -953,8 +965,8 @@ namespace AetherArk.Core
 
             // Port refit: the flagship grows with every gate it passes, so later regions are survivable.
             var ship = State.playerShip;
-            ship.maxHull += 4f;
-            ship.maxArmor += 3f;
+            ship.maxHull += 3f;
+            ship.maxArmor += 2f;
             ship.maxWard += 2f;
             ship.coreOutput += 1;
             var weapons = ship.GetSystem(ShipSystemType.Weapons);

@@ -19,9 +19,24 @@ internal static class HeadlessPlaythrough
         public bool Stalemate;
         public int Regions = 1;
         public string StalemateEnemy;
+        public int RegionReached = 1;
+        public List<BattleRecord> BattleRecords = new List<BattleRecord>();
+        public List<string> GateSnapshots = new List<string>();
+    }
+
+    private sealed class BattleRecord
+    {
+        public string Enemy;
+        public int Region;
+        public float Seconds;
+        public bool Won;
+        public float HullLost;
+        public bool Final;
     }
 
     private static string forcedEnemy;
+    private static string strategy = "standard";
+    private static bool report;
 
     private static int Main(string[] args)
     {
@@ -29,7 +44,11 @@ internal static class HeadlessPlaythrough
         var difficulty = args.Length > 1 ? (Difficulty)Enum.Parse(typeof(Difficulty), args[1], true) : Difficulty.Standard;
         var baseSeed = args.Length > 2 ? int.Parse(args[2]) : 17000;
         foreach (var arg in args)
+        {
             if (arg.StartsWith("--enemy=", StringComparison.Ordinal)) forcedEnemy = arg.Substring("--enemy=".Length);
+            if (arg.StartsWith("--strategy=", StringComparison.Ordinal)) strategy = arg.Substring("--strategy=".Length).ToLowerInvariant();
+            if (arg == "--report") report = true;
+        }
         var results = new List<Result>();
         for (var i = 0; i < runCount; i++) results.Add(Play(baseSeed + i * 7919, difficulty));
 
@@ -45,8 +64,13 @@ internal static class HeadlessPlaythrough
         if (victories.Count == 0)
         {
             Console.Error.WriteLine("No headless playthrough reached the Sky Gate.");
+            var shown = 0;
             foreach (var result in results)
+            {
+                if (shown++ >= 10) break;
                 Console.Error.WriteLine($"LOSS seed={result.Seed} reason={result.Defeat} jumps={result.Jumps} battles={result.Battles} combat={result.ActiveCombatSeconds:0}s morale={result.Morale} survivors={result.Survivors}");
+            }
+            if (report) PrintReport(results);
             return 1;
         }
 
@@ -80,7 +104,79 @@ internal static class HeadlessPlaythrough
             Console.WriteLine($"LOSS seed={result.Seed} reason={result.Defeat} jumps={result.Jumps} battles={result.Battles} combat={result.ActiveCombatSeconds:0}s morale={result.Morale} survivors={result.Survivors}");
         }
 
+        if (report) PrintReport(results);
         return victories.Count >= Math.Max(1, runCount / 4) ? 0 : 2;
+    }
+
+    private static void PrintReport(List<Result> results)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"=== Balance report (strategy: {strategy}) ===");
+        var regions = 0;
+        foreach (var result in results) regions = Math.Max(regions, result.Regions);
+
+        Console.WriteLine("Survival funnel (runs alive at the start of each region / victories):");
+        for (var region = 1; region <= regions; region++)
+        {
+            var reached = results.FindAll(result => result.RegionReached >= region).Count;
+            var lostHere = results.FindAll(result => !result.Victory && !result.Stalemate && result.RegionReached == region).Count;
+            Console.WriteLine($"  region {region}: reached {reached,3}  lost here {lostHere,3}");
+        }
+        Console.WriteLine($"  victory: {results.FindAll(result => result.Victory).Count}");
+
+        Console.WriteLine("Loss reasons by region:");
+        var reasons = new Dictionary<string, int>();
+        foreach (var result in results)
+        {
+            if (result.Victory || result.Stalemate) continue;
+            var key = $"region {result.RegionReached} {result.Defeat}";
+            reasons[key] = reasons.TryGetValue(key, out var count) ? count + 1 : 1;
+        }
+        foreach (var pair in reasons) Console.WriteLine($"  {pair.Key}: {pair.Value}");
+
+        Console.WriteLine("Battles by enemy (count / win rate / avg seconds / avg hull lost):");
+        var byEnemy = new Dictionary<string, List<BattleRecord>>();
+        foreach (var result in results)
+        foreach (var record in result.BattleRecords)
+        {
+            var key = record.Enemy + (record.Final ? " (gate)" : "");
+            if (!byEnemy.TryGetValue(key, out var list)) byEnemy[key] = list = new List<BattleRecord>();
+            list.Add(record);
+        }
+        foreach (var pair in byEnemy)
+        {
+            var wins = pair.Value.FindAll(record => record.Won).Count;
+            var seconds = 0f; var hull = 0f;
+            foreach (var record in pair.Value) { seconds += record.Seconds; hull += record.HullLost; }
+            Console.WriteLine($"  {pair.Key,-24} {pair.Value.Count,4}  {wins * 100f / pair.Value.Count,5:0.0}%  {seconds / pair.Value.Count,6:0}s  {hull / pair.Value.Count,5:0.0}");
+        }
+
+        Console.WriteLine("Battles by region (count / win rate / avg seconds):");
+        for (var region = 1; region <= regions; region++)
+        {
+            var list = new List<BattleRecord>();
+            foreach (var result in results) list.AddRange(result.BattleRecords.FindAll(record => record.Region == region));
+            if (list.Count == 0) continue;
+            var wins = list.FindAll(record => record.Won).Count;
+            var seconds = 0f; foreach (var record in list) seconds += record.Seconds;
+            Console.WriteLine($"  region {region}: {list.Count,4}  {wins * 100f / list.Count,5:0.0}%  {seconds / list.Count,6:0}s");
+        }
+
+        Console.WriteLine("Resources entering each region (avg aether/supplies/ordnance/salvage, hull%):");
+        for (var region = 2; region <= regions; region++)
+        {
+            var samples = new List<string>();
+            foreach (var result in results) if (result.GateSnapshots.Count >= region - 1) samples.Add(result.GateSnapshots[region - 2]);
+            if (samples.Count == 0) continue;
+            float a = 0, su = 0, o = 0, sa = 0, h = 0;
+            foreach (var sample in samples)
+            {
+                var parts = sample.Split(',');
+                a += float.Parse(parts[0]); su += float.Parse(parts[1]); o += float.Parse(parts[2]); sa += float.Parse(parts[3]); h += float.Parse(parts[4]);
+            }
+            var n = samples.Count;
+            Console.WriteLine($"  region {region}: {a / n:0.0} / {su / n:0.0} / {o / n:0.0} / {sa / n:0.0}, hull {h / n * 100f:0}%  (n={n})");
+        }
     }
 
     private static Result Play(int seed, Difficulty difficulty)
@@ -111,7 +207,22 @@ internal static class HeadlessPlaythrough
                 case GamePhase.Combat:
                     result.Battles++;
                     if (forcedEnemy != null && simulation.State.combatElapsed <= 0f) ForceEnemy(simulation);
-                    result.ActiveCombatSeconds += ResolveCombat(simulation);
+                    var record = new BattleRecord
+                    {
+                        Enemy = simulation.State.enemyShip?.id, Region = simulation.State.regionIndex, Final = simulation.State.isFinalBattle
+                    };
+                    var hullBefore = simulation.State.playerShip.hull;
+                    var regionBefore = simulation.State.regionIndex;
+                    record.Seconds = ResolveCombat(simulation);
+                    record.Won = simulation.State.phase != GamePhase.Defeat && simulation.State.phase != GamePhase.Combat;
+                    record.HullLost = Math.Max(0f, hullBefore - simulation.State.playerShip.hull);
+                    result.ActiveCombatSeconds += record.Seconds;
+                    result.BattleRecords.Add(record);
+                    if (simulation.State.regionIndex > regionBefore)
+                    {
+                        var r = simulation.State.resources; var ship = simulation.State.playerShip;
+                        result.GateSnapshots.Add($"{r.aether},{r.supplies},{r.ordnance},{r.salvage},{ship.hull / ship.maxHull}");
+                    }
                     if (simulation.State.phase == GamePhase.Combat)
                     {
                         // The time cap expired with both ships alive: a stalemate is a design defect, not a loss.
@@ -128,6 +239,7 @@ internal static class HeadlessPlaythrough
         result.Defeat = simulation.State.defeatReason;
         result.Jumps = simulation.State.totalTravelCount;
         result.Regions = simulation.State.regionCount;
+        result.RegionReached = simulation.State.regionIndex;
         result.Survivors = simulation.State.convoy.survivors;
         result.Morale = simulation.State.convoy.morale;
         return result;
@@ -240,19 +352,20 @@ internal static class HeadlessPlaythrough
             if (simulation.State.playerWeaponCooldown <= 0f)
                 simulation.FireMainWeapon(ShipSystemType.Weapons);
 
+            var cautious = strategy == "cautious";
             var bomber = simulation.State.squadrons.Find(squadron => squadron.type == SquadronType.Bomber);
-            if (!launchedBomber && bomber != null && bomber.CanLaunch && simulation.State.resources.ordnance >= bomber.ordnanceCost)
+            if (!cautious && !launchedBomber && bomber != null && bomber.CanLaunch && simulation.State.resources.ordnance >= bomber.ordnanceCost)
             {
                 if (simulation.LaunchSquadron(bomber.id, SquadronMission.Bombard, ShipSystemType.Weapons).success) launchedBomber = true;
             }
 
             var interceptor = simulation.State.squadrons.Find(squadron => squadron.type == SquadronType.Interceptor);
-            if (!launchedInterceptor && interceptor != null && interceptor.CanLaunch && simulation.State.resources.ordnance >= interceptor.ordnanceCost)
+            if (!cautious && !launchedInterceptor && interceptor != null && interceptor.CanLaunch && simulation.State.resources.ordnance >= interceptor.ordnanceCost)
             {
                 if (simulation.LaunchSquadron(interceptor.id, SquadronMission.Intercept, ShipSystemType.FlightDeck).success) launchedInterceptor = true;
             }
 
-            if (!overcharged && simulation.State.playerShip.instability < 55f)
+            if (!cautious && !overcharged && simulation.State.playerShip.instability < 55f)
             {
                 if (simulation.Overcharge(ShipSystemType.Weapons).success) overcharged = true;
             }

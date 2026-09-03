@@ -49,5 +49,5 @@ EA requires a completable 90–120 minute campaign, all core rule families, Kore
 - Ship operations, wings, and altitude/weather each create distinct meaningful decisions in a 20–30 minute slice.
 - All critical warnings identify the threatened crew, compartment, resource, or convoy condition and can auto-pause.
 - No event choice can spend unavailable resources; no blocked node can be entered; no save can resume an already-ended run.
-- Standard difficulty targets a 25–40% experienced win rate after sufficient EA data. Story targets 60%+, Harsh 10–20%.
+- Standard difficulty targets a 25–40% experienced win rate after sufficient EA data. Story targets 60%+, Harsh 10–20%. The headless autoplayer (a competent but not expert proxy) currently lands at 35% / 71% / 14% over the four-region campaign, with losses spread across regions 1, 2 and 4 rather than front-loaded. Known residual: the bulwark monitor remains easier than the storm cruiser at the gate (93% vs 70% autoplayer wins); human playtests should decide whether that gap is a feature of the roster or a defect.
 - Windows and macOS builds must share seeds and save payloads and maintain 60 fps at the locked 1920×1080 reference layout before the slice is promoted to EA production.

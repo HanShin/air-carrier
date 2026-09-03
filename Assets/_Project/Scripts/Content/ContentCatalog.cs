@@ -56,8 +56,8 @@ namespace AetherArk.Content
             new EnemyDefinition
             {
                 id = "enemy_cutter", displayName = "Imperial Pursuit Cutter", tier = 1, weight = 40,
-                hull = 24f, armor = 10f, ward = 8f, coreOutput = 8,
-                power = new[] { 1, 0, 1, 2, 1, 2, 0, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
+                hull = 24f, armor = 10f, ward = 8f, coreOutput = 9,
+                power = new[] { 1, 0, 1, 2, 1, 3, 0, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
             },
             new EnemyDefinition
             {
@@ -68,8 +68,8 @@ namespace AetherArk.Content
             new EnemyDefinition
             {
                 id = "enemy_scout", displayName = "Imperial Scout Frigate", tier = 1, weight = 20,
-                hull = 20f, armor = 8f, ward = 8f, coreOutput = 10,
-                power = new[] { 1, 0, 1, 3, 1, 1, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 1, 3, 1, 2 }
+                hull = 20f, armor = 8f, ward = 8f, coreOutput = 11,
+                power = new[] { 1, 0, 1, 3, 1, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 1, 3, 1, 2 }
             },
             new EnemyDefinition
             {
@@ -87,7 +87,7 @@ namespace AetherArk.Content
             {
                 id = "enemy_monitor", displayName = "Imperial Bulwark Monitor", tier = 2, weight = 40,
                 hull = 30f, armor = 22f, ward = 16f, coreOutput = 11,
-                power = new[] { 1, 0, 1, 1, 3, 2, 0, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 4, 4, 1, 2, 1, 2 }
+                power = new[] { 1, 0, 1, 1, 3, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 4, 4, 1, 3, 1, 2 }
             }
         };
 
@@ -350,11 +350,11 @@ namespace AetherArk.Content
             new RegionDefinition { id = "dawn_archipelago", nameKey = "region.dawn_archipelago", index = 1,
                 weatherWeights = new[] { 1, 1, 1, 1, 1, 1 }, encounterWeights = new[] { 38, 15, 15, 11, 11, 10 }, enemyStatMultiplier = 1f, extraAetherCostChance = 0.2f },
             new RegionDefinition { id = "storm_corridor", nameKey = "region.storm_corridor", index = 2,
-                weatherWeights = new[] { 1, 4, 4, 1, 1, 1 }, encounterWeights = new[] { 36, 12, 13, 6, 9, 24 }, enemyStatMultiplier = 1.08f, extraAetherCostChance = 0.25f },
+                weatherWeights = new[] { 1, 4, 4, 1, 1, 1 }, encounterWeights = new[] { 36, 12, 13, 6, 9, 24 }, enemyStatMultiplier = 1.1f, extraAetherCostChance = 0.25f },
             new RegionDefinition { id = "icefield_heights", nameKey = "region.icefield_heights", index = 3,
-                weatherWeights = new[] { 1, 1, 1, 1, 4, 4 }, encounterWeights = new[] { 34, 22, 22, 8, 6, 8 }, enemyStatMultiplier = 1.16f, extraAetherCostChance = 0.3f },
+                weatherWeights = new[] { 1, 1, 1, 1, 4, 4 }, encounterWeights = new[] { 34, 22, 22, 8, 6, 8 }, enemyStatMultiplier = 1.32f, extraAetherCostChance = 0.3f },
             new RegionDefinition { id = "imperial_cordon", nameKey = "region.imperial_cordon", index = 4,
-                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.24f, extraAetherCostChance = 0.35f }
+                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.5f, extraAetherCostChance = 0.35f }
         };
 
         public static int RegionCount => Regions.Length;
