@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.CompilerServices;
 using AetherArk.Content;
 using AetherArk.Core;
 using AetherArk.Runtime;
@@ -1065,6 +1066,77 @@ namespace AetherArk.Tests
             Assert.That(earlyShot, Is.GreaterThan(0f));
             Assert.That(lateShot, Is.EqualTo(earlyShot * ContentCatalog.GetRegion(3).enemyStatMultiplier).Within(0.01f),
                 "enemy shot damage must follow the region multiplier, not just enemy hull");
+        }
+
+        private static string FixtureRoot(string version, [CallerFilePath] string sourcePath = "")
+        {
+            // The source path resolves the repository even when the tests run from an external harness directory.
+            var candidates = new[] { Path.GetDirectoryName(sourcePath) ?? "", Directory.GetCurrentDirectory(), AppContext.BaseDirectory };
+            foreach (var start in candidates)
+            {
+                var directory = new DirectoryInfo(start);
+                while (directory != null)
+                {
+                    var probe = Path.Combine(directory.FullName, "Assets", "_Project", "Tests", "EditMode", "Fixtures", version);
+                    if (Directory.Exists(probe)) return probe;
+                    directory = directory.Parent;
+                }
+            }
+            Assert.Fail("Fixture folder not found for " + version + "; run Aether Ark/Write Save Fixtures in the editor.");
+            return null;
+        }
+
+        [Test]
+        public void SaveFixtures_V1ProfileAndRunLoadThroughTheCurrentMigrations()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "aether-ark-fixture-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                // Copy so the test can never mutate the committed fixture.
+                foreach (var file in Directory.GetFiles(FixtureRoot("v1"), "*.json"))
+                    File.Copy(file, Path.Combine(root, Path.GetFileName(file)));
+                var service = new SaveService(root);
+
+                var profile = service.LoadProfile();
+                Assert.That(profile.schemaVersion, Is.GreaterThanOrEqualTo(1));
+                Assert.That(profile.captainName, Is.EqualTo("Fixture Captain"));
+                Assert.That(profile.captainLineage, Is.EqualTo(CrewLineage.Dwarf));
+                Assert.That(profile.supportShip, Is.EqualTo(SupportShipType.Pathfinder));
+                Assert.That(profile.language, Is.EqualTo(Language.English));
+                Assert.That(profile.tutorialSeen, Is.True);
+                Assert.That(profile.accessibility.combatSpeed, Is.EqualTo(1.25f).Within(0.001f));
+                Assert.That(profile.accessibility.highContrast, Is.True);
+
+                var run = service.LoadRun();
+                Assert.That(run, Is.Not.Null, "a suspended v1 run must still load");
+                Assert.That(run.phase, Is.EqualTo(GamePhase.RouteMap));
+                Assert.That(run.seed, Is.EqualTo(424242));
+                Assert.That(run.regionIndex, Is.EqualTo(2));
+                Assert.That(run.regionCount, Is.EqualTo(ContentCatalog.RegionCount));
+                Assert.That(run.totalTravelCount, Is.EqualTo(9));
+                Assert.That(run.currentNodeId, Is.EqualTo("n2_1"));
+                Assert.That(run.routeNodes.Count, Is.EqualTo(20));
+                Assert.That(run.crew.Count, Is.EqualTo(6));
+                Assert.That(run.crew[4].IsDowned, Is.True);
+                Assert.That(run.squadrons[0].strength, Is.EqualTo(2));
+                Assert.That(run.resources.salvage, Is.EqualTo(37));
+                Assert.That(run.playerShip.hull, Is.EqualTo(21f).Within(0.001f));
+                Assert.That(run.playerShip.GetSystem(ShipSystemType.Weapons).damage, Is.EqualTo(30f).Within(0.001f));
+                Assert.That(run.playerShip.GetRoom(ShipSystemType.Weapons).fire, Is.EqualTo(12f).Within(0.001f));
+                Assert.That(ContentCatalog.GetDeckPlan(run.playerShip.id), Is.Not.Null, "a loaded ship must still map to a deck plan");
+
+                // A loaded run must be playable: resume, travel once and reach a real phase.
+                var simulation = new GameSimulation(run);
+                var destination = run.routeNodes.Find(simulation.CanTravelTo);
+                Assert.That(destination, Is.Not.Null, "the fixture's current node must have a reachable neighbour");
+                Assert.That(simulation.TravelTo(destination.id).success, Is.True);
+                Assert.That(run.phase, Is.EqualTo(GamePhase.Combat).Or.EqualTo(GamePhase.Encounter).Or.EqualTo(GamePhase.RouteMap));
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
         }
 
         [TestCase(WeatherType.Thunderhead, -0.08f)]

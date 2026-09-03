@@ -32,7 +32,7 @@ Weather profiles are clear, thunderhead, turbulence, aether current, icing, and 
 
 All persistent state is plain serializable data: `RunState`, `ShipState`, `CrewState`, `SquadronState`, `ConvoyState`, `RouteNodeState`, `EncounterDefinition`, and `WeatherProfile`. UI invokes `IGameCommand` implementations and never owns combat truth. Three RNG streams isolate route, combat, and event outcomes so a save and seed can reproduce a defect.
 
-Profile and suspended run saves are separate, schema-versioned JSON files written through a temporary file before replacement. EA migrations must remain additive; destructive schema changes require a dedicated migrator and fixture saves from every public build.
+Profile and suspended run saves are separate, schema-versioned JSON files written through a temporary file before replacement. EA migrations must remain additive; destructive schema changes require a dedicated migrator and fixture saves from every public build. Fixture saves are committed per schema version under the EditMode test folder and loaded by a regression test; write a new fixture folder whenever the schema version is bumped.
 
 ## Content path to Early Access and 1.0
 

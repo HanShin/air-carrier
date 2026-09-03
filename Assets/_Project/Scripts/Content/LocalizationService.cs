@@ -157,10 +157,10 @@ namespace AetherArk.Content
             Add("ui.last_report", "최근 보고", "LATEST REPORT");
             Add("ui.emergency_aether", "비상 에테르 추출: 생존자 12명·사기 6을 희생해 연료 2 확보", "Emergency aether burn: lose 12 survivors and 6 morale for 2 fuel");
             Add("ui.emergency_ordnance", "비상 탄약 조립 (인양물→보급→인명)", "Emergency ordnance (salvage→supplies→lives)");
-            Add("tutorial.fire", "첫 교전: 오른쪽 적 구획을 선택한 뒤 중앙의 주포 발사를 누르십시오.", "FIRST ENGAGEMENT: select an enemy compartment, then fire the main battery.");
-            Add("tutorial.squadron", "편대 임무를 선택하십시오. 요격은 적 공습을 막고 폭격은 선택 구획을 공격합니다.", "Launch an air-wing mission. Intercept blocks strikes; Bombard attacks the selected room.");
-            Add("tutorial.crew", "손상 발생: 승무원을 선택한 뒤 불타거나 파손된 구획을 선택해 이동시키십시오.", "DAMAGE CONTROL: select a crew member, then the burning or damaged compartment.");
-            Add("tutorial.power", "필요한 설비의 동력 +/−를 조정하십시오. 공명자는 같은 구획에서 과부하를 사용할 수 있습니다.", "Adjust system power with +/−. A resonator can overcharge the room they occupy.");
+            Add("tutorial.fire", "첫 교전: 오른쪽 적 평면도의 방을 클릭해 조준한 뒤 [F] 주포 발사를 누르십시오.", "FIRST ENGAGEMENT: click a room on the enemy deck plan to target it, then press [F] Fire.");
+            Add("tutorial.squadron", "아래 편대 슬롯에서 임무를 고르십시오. ▲요격은 공습·강습정을 막고 ▼폭격은 조준한 방을 때립니다.", "Pick a mission on the wing slots below. ▲Intercept stops strikes and boarders; ▼Bombard hits the targeted enemy room.");
+            Add("tutorial.crew", "손상 발생: 왼쪽 초상이나 토큰으로 승무원을 고른 뒤 불타거나 파손된 방을 클릭하십시오.", "DAMAGE CONTROL: pick a crew member by portrait or token, then click the burning or damaged room.");
+            Add("tutorial.power", "평면도의 방을 클릭한 뒤 가운데 패널의 +/−로 동력을 조절하십시오. 공명자가 있는 방은 과부하 가능.", "Click a room on your deck plan, then adjust its power with +/− in the centre panel. The resonator's room can overcharge.");
 
             Add("system.bridge", "함교", "Bridge");
             Add("system.core", "에테르 코어", "Aether Core");

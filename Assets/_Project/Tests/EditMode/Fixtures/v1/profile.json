@@ -1,0 +1,22 @@
+{
+    "schemaVersion": 1,
+    "language": 1,
+    "difficulty": 1,
+    "captainName": "Fixture Captain",
+    "captainLineage": 2,
+    "supportShip": 2,
+    "tutorialSeen": true,
+    "accessibility": {
+        "uiScale": 1.0,
+        "combatSpeed": 1.25,
+        "autoPauseOnWarning": true,
+        "reducedMotion": false,
+        "highContrast": true,
+        "pauseKey": "Space"
+    },
+    "unlocks": [
+        "ship_vanguard",
+        "squad_interceptor",
+        "squad_bomber"
+    ]
+}
