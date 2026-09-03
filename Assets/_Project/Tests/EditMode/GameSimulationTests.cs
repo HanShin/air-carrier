@@ -947,7 +947,9 @@ namespace AetherArk.Tests
             simulation.BeginCombat(2, true);
             WinCurrentBattle(simulation);
 
-            Assert.That(state.phase, Is.EqualTo(GamePhase.RouteMap), "the campaign should continue after the first gate");
+            Assert.That(state.phase, Is.EqualTo(GamePhase.Port), "the campaign should dock at the port after the first gate");
+            Assert.That(simulation.DepartPort().success, Is.True);
+            Assert.That(state.phase, Is.EqualTo(GamePhase.RouteMap), "the campaign should continue after the port");
             Assert.That(state.regionIndex, Is.EqualTo(2));
             Assert.That(state.travelCount, Is.EqualTo(0));
             Assert.That(state.stormColumn, Is.EqualTo(-1));
@@ -960,7 +962,7 @@ namespace AetherArk.Tests
             Assert.That(state.combatLog.Exists(entry => entry.key == "log.region_cleared"), Is.True);
             Assert.That(state.playerShip.hull, Is.EqualTo(state.playerShip.maxHull).Within(0.001f), "port stop should fully repair the hull");
             Assert.That(state.playerShip.coreOutput, Is.EqualTo(12 + 1), "each cleared region should grow the core output");
-            Assert.That(state.playerShip.maxHull, Is.EqualTo(maxHullBefore + 3f).Within(0.001f), "each cleared region should grow the hull");
+            Assert.That(state.playerShip.maxHull, Is.EqualTo(maxHullBefore + 2f).Within(0.001f), "each cleared region should grow the hull");
             Assert.That(state.playerShip.AllocatedPower(), Is.LessThanOrEqualTo(state.playerShip.coreOutput));
             Assert.That(state.resources.ordnance, Is.GreaterThanOrEqualTo(8));
         }
@@ -1137,6 +1139,153 @@ namespace AetherArk.Tests
             {
                 if (Directory.Exists(root)) Directory.Delete(root, true);
             }
+        }
+
+        [Test]
+        public void ModuleLibrary_HasThirtyLocalizedDistinctModulesWithEffects()
+        {
+            var ids = ContentCatalog.ModuleIds();
+            Assert.That(ids.Count, Is.GreaterThanOrEqualTo(30));
+            Assert.That(new System.Collections.Generic.HashSet<string>(ids).Count, Is.EqualTo(ids.Count), "module ids must be unique");
+            var ko = new LocalizationService(Language.Korean);
+            var en = new LocalizationService(Language.English);
+            foreach (var id in ids)
+            {
+                var module = ContentCatalog.GetModule(id);
+                Assert.That(module.cost, Is.GreaterThan(0), id);
+                Assert.That(module.tier, Is.InRange(1, 3), id);
+                Assert.That(ko.T(module.nameKey), Is.Not.EqualTo(module.nameKey), id);
+                Assert.That(en.T(module.nameKey), Is.Not.EqualTo(module.nameKey), id);
+                Assert.That(ko.T(module.descriptionKey), Is.Not.EqualTo(module.descriptionKey), id);
+                Assert.That(en.T(module.descriptionKey), Is.Not.EqualTo(module.descriptionKey), id);
+                Assert.That(ModuleRules.HasAnyEffect(module), Is.True, id + " does nothing");
+            }
+        }
+
+        [Test]
+        public void ModuleOffers_AreDeterministicDistinctAndExcludeInstalled()
+        {
+            var installed = new System.Collections.Generic.List<string> { "reinforced_ribs" };
+            var first = ContentCatalog.OfferModules(1234, 2, installed);
+            var second = ContentCatalog.OfferModules(1234, 2, installed);
+            Assert.That(first, Is.EqualTo(second));
+            Assert.That(first.Count, Is.EqualTo(3));
+            Assert.That(new System.Collections.Generic.HashSet<string>(first).Count, Is.EqualTo(3));
+            Assert.That(first, Does.Not.Contain("reinforced_ribs"));
+            Assert.That(ContentCatalog.OfferModules(1234, 3, installed), Is.Not.EqualTo(first), "offers should change with the region");
+        }
+
+        private static GameSimulation RunAtPort()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 600);
+            simulation.BeginCombat(2, true);
+            WinCurrentBattle(simulation);
+            Assert.That(simulation.State.phase, Is.EqualTo(GamePhase.Port), "clearing a gate should dock at the port");
+            return simulation;
+        }
+
+        [Test]
+        public void Port_PurchaseAppliesFlatStatsAndRespectsSalvageSlotsAndDuplicates()
+        {
+            var simulation = RunAtPort();
+            var state = simulation.State;
+            state.resources.salvage = 100;
+            var hullBefore = state.playerShip.maxHull;
+
+            Assert.That(simulation.PurchaseModule("reinforced_ribs").success, Is.True);
+            Assert.That(state.installedModules, Does.Contain("reinforced_ribs"));
+            Assert.That(state.playerShip.maxHull, Is.EqualTo(hullBefore + ContentCatalog.GetModule("reinforced_ribs").maxHull).Within(0.001f));
+            Assert.That(state.playerShip.hull, Is.EqualTo(state.playerShip.maxHull).Within(0.001f), "a hull module should also fill the new capacity at the port");
+            Assert.That(state.resources.salvage, Is.EqualTo(100 - ContentCatalog.GetModule("reinforced_ribs").cost));
+            Assert.That(simulation.PurchaseModule("reinforced_ribs").success, Is.False, "no duplicates");
+
+            state.resources.salvage = 0;
+            Assert.That(simulation.PurchaseModule("rifled_barrels").success, Is.False, "unaffordable");
+            state.resources.salvage = 500;
+            foreach (var id in new[] { "rifled_barrels", "damage_control_teams", "long_range_array" })
+                Assert.That(simulation.PurchaseModule(id).success, Is.True, id);
+            Assert.That(simulation.PurchaseModule("extended_hangar").success, Is.False, "slots are full");
+            Assert.That(state.installedModules.Count, Is.EqualTo(state.playerShip.moduleSlots));
+
+            Assert.That(simulation.DepartPort().success, Is.True);
+            Assert.That(state.phase, Is.EqualTo(GamePhase.RouteMap));
+            Assert.That(simulation.PurchaseModule("extended_hangar").success, Is.False, "purchases only happen at the port");
+        }
+
+        [Test]
+        public void Modules_ChangeCombatAndRouteRulesThroughTheModifierSet()
+        {
+            var simulation = RunAtPort();
+            var state = simulation.State;
+            state.resources.salvage = 500;
+            var baseDamage = simulation.PlayerShotDamage();
+            Assert.That(simulation.PurchaseModule("rifled_barrels").success, Is.True);
+            Assert.That(simulation.PlayerShotDamage(), Is.EqualTo(baseDamage * ContentCatalog.GetModule("rifled_barrels").weaponDamage).Within(0.001f));
+
+            Assert.That(simulation.PurchaseModule("navigator_charts").success, Is.True);
+            simulation.DepartPort();
+            var expensive = state.routeNodes.Find(node => node.aetherCost >= 2);
+            if (expensive != null) Assert.That(simulation.TravelCost(expensive), Is.EqualTo(expensive.aetherCost - 1));
+            var cheap = state.routeNodes.Find(node => node.aetherCost == 1);
+            Assert.That(simulation.TravelCost(cheap), Is.EqualTo(1), "the discount never drops a jump below one aether");
+
+            state.installedModules.Add("escort_doctrine");
+            state.installedModules.Add("salvage_cranes");
+            var salvageBefore = state.resources.salvage;
+            simulation.BeginCombat(1, false);
+            Assert.That(state.interceptCharges, Is.EqualTo(ContentCatalog.GetModule("escort_doctrine").interceptCharges));
+            WinCurrentBattle(simulation);
+            Assert.That(state.resources.salvage - salvageBefore, Is.EqualTo(9 + ContentCatalog.GetModule("salvage_cranes").salvageReward));
+        }
+
+        [Test]
+        public void Modules_RaiseSquadronStrengthAndPersistInSaves()
+        {
+            var simulation = RunAtPort();
+            var state = simulation.State;
+            state.resources.salvage = 500;
+            var maxBefore = state.squadrons[0].maxStrength;
+            Assert.That(simulation.PurchaseModule("extended_hangar").success, Is.True);
+            Assert.That(state.squadrons[0].maxStrength, Is.EqualTo(maxBefore + 1));
+            Assert.That(state.squadrons[0].strength, Is.EqualTo(state.squadrons[0].maxStrength));
+
+            var root = Path.Combine(Path.GetTempPath(), "aether-ark-tests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var service = new SaveService(root);
+                service.SaveRun(state);
+                var loaded = service.LoadRun();
+                Assert.That(loaded.installedModules, Is.EqualTo(state.installedModules));
+                Assert.That(loaded.playerShip.moduleSlots, Is.EqualTo(state.playerShip.moduleSlots));
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        [Test]
+        public void Modules_BoardingDefenceClearsIntrudersFaster()
+        {
+            float TimeToClear(bool armoury)
+            {
+                var simulation = RunAgainst("enemy_boarder");
+                var state = simulation.State;
+                IsolateFromOtherThreats(state);
+                state.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 0;
+                if (armoury) state.installedModules.Add("boarding_armory");
+                var marine = state.crew.Find(crew => crew.role == CrewRole.Marine);
+                simulation.MoveCrew(marine.id, ShipSystemType.Weapons);
+                state.playerShip.GetRoom(ShipSystemType.Weapons).intruders = 3;
+                simulation.SetPaused(false);
+                var elapsed = 0f;
+                while (state.playerShip.GetRoom(ShipSystemType.Weapons).intruders > 0 && elapsed < 60f) { simulation.Tick(0.1f); elapsed += 0.1f; }
+                return elapsed;
+            }
+            Assert.That(TimeToClear(true), Is.LessThan(TimeToClear(false) * 0.75f));
         }
 
         [TestCase(WeatherType.Thunderhead, -0.08f)]

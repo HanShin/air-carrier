@@ -160,6 +160,61 @@ namespace AetherArk.Content
             return ship;
         }
 
+        private static readonly Dictionary<string, ModuleDefinition> Modules = BuildModules();
+
+        private static Dictionary<string, ModuleDefinition> BuildModules()
+        {
+            var result = new Dictionary<string, ModuleDefinition>();
+            ModuleLibrary.AddAll(result);
+            return result;
+        }
+
+        public static ModuleDefinition GetModule(string id)
+        {
+            return !string.IsNullOrEmpty(id) && Modules.TryGetValue(id, out var module) ? module : null;
+        }
+
+        public static List<string> ModuleIds()
+        {
+            return new List<string>(Modules.Keys);
+        }
+
+        /// <summary>
+        /// Three distinct uninstalled modules for a port, deterministic per seed and region.
+        /// Tiers above regionIndex + 1 are excluded, and higher tiers are weighted down while still possible.
+        /// </summary>
+        public static List<string> OfferModules(int seed, int regionIndex, List<string> installed)
+        {
+            var random = SeededRandom.Seed(unchecked(seed + regionIndex * 31337), 0x0FF37u);
+            var pool = new List<string>();
+            var weights = new List<int>();
+            foreach (var pair in Modules)
+            {
+                if (installed != null && installed.Contains(pair.Key)) continue;
+                if (pair.Value.tier > regionIndex + 1) continue;
+                pool.Add(pair.Key);
+                weights.Add(pair.Value.tier <= regionIndex ? 3 : 1);
+            }
+            var offers = new List<string>();
+            while (offers.Count < 3 && pool.Count > 0)
+            {
+                var total = 0;
+                for (var i = 0; i < weights.Count; i++) total += weights[i];
+                var roll = SeededRandom.Range(ref random, 0, total);
+                var index = 0;
+                for (; index < weights.Count; index++)
+                {
+                    if (roll < weights[index]) break;
+                    roll -= weights[index];
+                }
+                if (index >= pool.Count) index = pool.Count - 1;
+                offers.Add(pool[index]);
+                pool.RemoveAt(index);
+                weights.RemoveAt(index);
+            }
+            return offers;
+        }
+
         private static readonly Dictionary<string, DeckPlan> DeckPlans = BuildDeckPlans();
 
         public static DeckPlan GetDeckPlan(string shipId)
@@ -350,11 +405,11 @@ namespace AetherArk.Content
             new RegionDefinition { id = "dawn_archipelago", nameKey = "region.dawn_archipelago", index = 1,
                 weatherWeights = new[] { 1, 1, 1, 1, 1, 1 }, encounterWeights = new[] { 38, 15, 15, 11, 11, 10 }, enemyStatMultiplier = 1f, extraAetherCostChance = 0.2f },
             new RegionDefinition { id = "storm_corridor", nameKey = "region.storm_corridor", index = 2,
-                weatherWeights = new[] { 1, 4, 4, 1, 1, 1 }, encounterWeights = new[] { 36, 12, 13, 6, 9, 24 }, enemyStatMultiplier = 1.1f, extraAetherCostChance = 0.25f },
+                weatherWeights = new[] { 1, 4, 4, 1, 1, 1 }, encounterWeights = new[] { 36, 12, 13, 6, 9, 24 }, enemyStatMultiplier = 1.12f, extraAetherCostChance = 0.25f },
             new RegionDefinition { id = "icefield_heights", nameKey = "region.icefield_heights", index = 3,
-                weatherWeights = new[] { 1, 1, 1, 1, 4, 4 }, encounterWeights = new[] { 34, 22, 22, 8, 6, 8 }, enemyStatMultiplier = 1.32f, extraAetherCostChance = 0.3f },
+                weatherWeights = new[] { 1, 1, 1, 1, 4, 4 }, encounterWeights = new[] { 34, 22, 22, 8, 6, 8 }, enemyStatMultiplier = 1.38f, extraAetherCostChance = 0.3f },
             new RegionDefinition { id = "imperial_cordon", nameKey = "region.imperial_cordon", index = 4,
-                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.5f, extraAetherCostChance = 0.35f }
+                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.6f, extraAetherCostChance = 0.35f }
         };
 
         public static int RegionCount => Regions.Length;

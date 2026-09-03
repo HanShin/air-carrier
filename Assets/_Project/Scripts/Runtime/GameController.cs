@@ -88,12 +88,30 @@ namespace AetherArk.Runtime
             return true;
         }
 
+        /// <summary>`-debug-port` opens the port after clearing the first gate on a post-tutorial run.</summary>
+        private bool TryDebugPortLaunch(string[] args)
+        {
+            if (Array.IndexOf(args, "-debug-port") < 0) return false;
+            Profile.tutorialSeen = true;
+            Simulation = GameSimulation.NewRun(Profile, 41234);
+            Simulation.State.resources.salvage = 40;
+            Simulation.BeginCombat(2, true);
+            Simulation.ApplyDamage(Simulation.State.enemyShip, ShipSystemType.AetherCore, 999f, true);
+            Simulation.SetPaused(false);
+            Simulation.Tick(0.1f);
+            Screen = FrontendScreen.Game;
+            previousPhase = Simulation.State.phase;
+            view.ShowGamePhase();
+            return true;
+        }
+
         private void TryDebugCombatLaunch()
         {
             if (!Debug.isDebugBuild) return;
             var args = Environment.GetCommandLineArgs();
             if (TryDebugRouteLaunch(args)) return;
             if (TryDebugEventLaunch(args)) return;
+            if (TryDebugPortLaunch(args)) return;
             var index = Array.IndexOf(args, "-debug-combat");
             if (index < 0) return;
             var wanted = index + 1 < args.Length && !args[index + 1].StartsWith("-") ? args[index + 1].ToLowerInvariant() : "cutter";
@@ -181,6 +199,10 @@ namespace AetherArk.Runtime
                         }
                         return true;
                     }
+                    break;
+
+                case GamePhase.Port:
+                    if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) { view.ConfirmPort(); return true; }
                     break;
 
                 case GamePhase.Encounter:
@@ -348,6 +370,8 @@ namespace AetherArk.Runtime
         }
 
         public void Travel(string nodeId) => Apply(() => Simulation.TravelTo(nodeId));
+        public void PurchaseModule(string moduleId) => Apply(() => Simulation.PurchaseModule(moduleId));
+        public void DepartPort() => Apply(() => Simulation.DepartPort());
         public void ChooseEncounter(string choiceId) => Apply(() => Simulation.ChooseEncounter(choiceId));
         public void SkipEncounter() => Apply(() => Simulation.SkipEncounter());
         public void TogglePause() { Simulation.TogglePause(); PersistAndRefresh(); }

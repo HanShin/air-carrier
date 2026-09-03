@@ -46,6 +46,7 @@ namespace AetherArk.Content
         private void AddStrings()
         {
             AddEncounterStrings();
+            AddModuleStrings();
             Add("game.title", "에테르 아크", "AETHER ARK");
             Add("game.subtitle", "천공 피난선단 지휘 프로토타입", "Sky Convoy Command Prototype");
             Add("menu.new_run", "새 원정", "New Expedition");
@@ -98,6 +99,23 @@ namespace AetherArk.Content
             Add("ui.blocked", "폭풍 봉쇄", "STORMED");
             Add("ui.depart", "출항", "Depart");
             Add("ui.region", "지역 {0}", "Region {0}");
+            Add("ui.port_title", "항구 정박", "IN PORT");
+            Add("ui.port_body", "천공문을 통과했습니다. 선단은 수리와 재보급을 마쳤고, 조선소가 기함 개장 모듈을 제안합니다.", "You are through the gate. The convoy is repaired and resupplied, and the yard offers flagship modules.");
+            Add("ui.port_offers", "제안 모듈", "OFFERED MODULES");
+            Add("ui.port_installed", "설치된 모듈 ({0})", "INSTALLED MODULES ({0})");
+            Add("ui.port_none", "설치된 모듈 없음", "No modules installed");
+            Add("ui.buy", "구매", "Buy");
+            Add("ui.installed", "설치됨", "Installed");
+            Add("ui.slots_full", "슬롯 가득 참", "Slots full");
+            Add("ui.tier", "등급 {0}", "Tier {0}");
+            Add("ui.port_depart", "[Enter] 출항", "[Enter] Depart");
+            Add("command.port_only", "항구에서만 구매할 수 있습니다.", "Purchases are only possible in port.");
+            Add("command.module_unknown", "알 수 없는 모듈입니다.", "Unknown module.");
+            Add("command.module_installed", "이미 설치된 모듈입니다.", "That module is already installed.");
+            Add("command.module_slots", "모듈 슬롯이 가득 찼습니다.", "No module slots left.");
+            Add("command.module_cost", "인양물이 부족합니다.", "Not enough salvage.");
+            Add("command.module_bought", "모듈을 설치했습니다.", "Module installed.");
+            Add("log.module_installed", "{0} 설치 완료.", "{0} installed.");
             Add("region.dawn_archipelago", "여명 군도", "Dawn Archipelago");
             Add("region.storm_corridor", "폭풍 회랑", "Storm Corridor");
             Add("region.icefield_heights", "빙운 고원", "Icefield Heights");

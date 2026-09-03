@@ -204,6 +204,9 @@ internal static class HeadlessPlaythrough
                     result.Events++;
                     ResolveEncounter(simulation);
                     break;
+                case GamePhase.Port:
+                    ResolvePort(simulation);
+                    break;
                 case GamePhase.Combat:
                     result.Battles++;
                     if (forcedEnemy != null && simulation.State.combatElapsed <= 0f) ForceEnemy(simulation);
@@ -265,6 +268,36 @@ internal static class HeadlessPlaythrough
             replacement.maxWard += 4f; replacement.ward += 4f;
         }
         simulation.State.enemyShip = replacement;
+    }
+
+    private static readonly string[] ModulePriority =
+    {
+        "storm_keel", "reinforced_ribs", "ablative_plating", "aether_shells", "rifled_barrels", "autoloader",
+        "damage_control_teams", "ward_lattice", "ward_harmonizer", "escort_doctrine", "extended_hangar", "gunnery_computer"
+    };
+
+    private static void ResolvePort(GameSimulation simulation)
+    {
+        var bought = true;
+        while (bought)
+        {
+            bought = false;
+            var offers = simulation.PortOffers();
+            string pick = null;
+            foreach (var preferred in ModulePriority)
+                if (offers.Contains(preferred) && simulation.State.resources.salvage >= ContentCatalog.GetModule(preferred).cost) { pick = preferred; break; }
+            if (pick == null)
+            {
+                var cheapest = int.MaxValue;
+                foreach (var offer in offers)
+                {
+                    var cost = ContentCatalog.GetModule(offer).cost;
+                    if (cost < cheapest && simulation.State.resources.salvage >= cost) { cheapest = cost; pick = offer; }
+                }
+            }
+            if (pick != null && simulation.PurchaseModule(pick).success) bought = true;
+        }
+        simulation.DepartPort();
     }
 
     private static void ResolveMap(GameSimulation simulation)

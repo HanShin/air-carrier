@@ -118,6 +118,7 @@ namespace AetherArk.Runtime
                 case GamePhase.Combat: ShowCombat(); break;
                 case GamePhase.Victory: ShowEnding(true); break;
                 case GamePhase.Defeat: ShowEnding(false); break;
+                case GamePhase.Port: ShowPort(); break;
             }
         }
 
@@ -339,6 +340,16 @@ namespace AetherArk.Runtime
                     new Vector2(20f, 330f), new Vector2(420f, 50f), FontStyle.Bold);
                 ui.Text("PreviewHint", panel, l10n.T("ui.route_select_hint"), 15, UiFactory.TextMuted, TextAnchor.UpperCenter,
                     new Vector2(30f, 250f), new Vector2(400f, 70f));
+                var installed = new StringBuilder();
+                for (var i = 0; i < state.installedModules.Count; i++)
+                {
+                    var module = ContentCatalog.GetModule(state.installedModules[i]);
+                    if (module == null) continue;
+                    if (installed.Length > 0) installed.Append('\n');
+                    installed.Append("◆ ").Append(l10n.T(module.nameKey));
+                }
+                ui.Text("PreviewModules", panel, l10n.T("ui.port_installed", state.installedModules.Count.ToString()) + "\n" + (installed.Length > 0 ? installed.ToString() : l10n.T("ui.port_none")),
+                    13, UiFactory.TextMuted, TextAnchor.UpperLeft, new Vector2(24f, 60f), new Vector2(412f, 150f));
                 return;
             }
 
@@ -385,6 +396,68 @@ namespace AetherArk.Runtime
             var depart = ui.Button("Depart", panel, "[Enter] " + l10n.T("ui.depart"), ConfirmRouteSelection,
                 new Vector2(20f, 48f), new Vector2(420f, 58f), available ? UiFactory.Brass : UiFactory.PanelSoft, available ? UiFactory.Ink : UiFactory.TextMuted, 19);
             depart.interactable = available;
+        }
+
+        public void ConfirmPort()
+        {
+            var simulation = controller.Simulation;
+            if (simulation != null && simulation.State.phase == GamePhase.Port) controller.DepartPort();
+        }
+
+        private void ShowPort()
+        {
+            ui.Clear();
+            ui.Background(controller.Background, new Color(0.02f, 0.05f, 0.08f, 0.66f));
+            AddStatusBar();
+            var state = controller.Simulation.State;
+            var region = ContentCatalog.GetRegion(state.regionIndex);
+            var panel = ui.PanelRect("PortPanel", ui.Root, new Vector2(160f, 120f), new Vector2(1600f, 800f), PanelColor);
+            ui.Text("PortTitle", panel, l10n.T("ui.port_title") + "  —  " + l10n.T("ui.region", $"{state.regionIndex}/{state.regionCount}") + " · " + l10n.T(region.nameKey), 32,
+                UiFactory.Brass, TextAnchor.MiddleLeft, new Vector2(50f, 720f), new Vector2(1500f, 56f), FontStyle.Bold);
+            ui.Text("PortBody", panel, l10n.T("ui.port_body"), 18, UiFactory.TextPrimary, TextAnchor.UpperLeft,
+                new Vector2(50f, 640f), new Vector2(1500f, 70f));
+            ui.Text("PortSalvage", panel, $"{l10n.T("ui.salvage")} {state.resources.salvage}   ·   {l10n.T("ui.port_installed", $"{state.installedModules.Count}/{state.playerShip.moduleSlots}")}", 20,
+                UiFactory.Aether, TextAnchor.MiddleLeft, new Vector2(50f, 590f), new Vector2(1500f, 40f), FontStyle.Bold);
+
+            ui.Text("OffersTitle", panel, l10n.T("ui.port_offers"), 18, UiFactory.Brass, TextAnchor.MiddleLeft, new Vector2(50f, 540f), new Vector2(600f, 36f), FontStyle.Bold);
+            var offers = controller.Simulation.PortOffers();
+            var slotsFull = state.installedModules.Count >= state.playerShip.moduleSlots;
+            for (var i = 0; i < offers.Count; i++)
+            {
+                var module = ContentCatalog.GetModule(offers[i]);
+                if (module == null) continue;
+                var x = 50f + i * 500f;
+                var card = ui.PanelRect("Offer_" + module.id, panel, new Vector2(x, 260f), new Vector2(480f, 270f), UiFactory.PanelSoft);
+                card.GetComponent<Image>().raycastTarget = false;
+                ui.Outline("OfferEdge_" + module.id, panel, new Vector2(x, 260f), new Vector2(480f, 270f), 1f, new Color(0.3f, 0.36f, 0.42f, 0.9f));
+                ui.Text("OfferName_" + module.id, card, l10n.T(module.nameKey), 22, UiFactory.TextPrimary, TextAnchor.MiddleLeft, new Vector2(20f, 214f), new Vector2(440f, 40f), FontStyle.Bold);
+                ui.Text("OfferMeta_" + module.id, card, $"{l10n.EnumName(module.category)}  ·  {l10n.T("ui.tier", module.tier.ToString())}", 14, UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                    new Vector2(20f, 184f), new Vector2(440f, 26f));
+                ui.Text("OfferDesc_" + module.id, card, l10n.T(module.descriptionKey), 16, UiFactory.Aether, TextAnchor.UpperLeft, new Vector2(20f, 90f), new Vector2(440f, 90f));
+                var affordable = state.resources.salvage >= module.cost;
+                var localId = module.id;
+                var buy = ui.Button("Buy_" + module.id, card, $"{l10n.T("ui.buy")}  ·  {l10n.T("ui.salvage")} {module.cost}", () => controller.PurchaseModule(localId),
+                    new Vector2(20f, 20f), new Vector2(440f, 54f), affordable && !slotsFull ? UiFactory.Brass : UiFactory.PanelSoft, affordable && !slotsFull ? UiFactory.Ink : UiFactory.TextMuted, 17);
+                buy.interactable = affordable && !slotsFull;
+                if (slotsFull) ui.Text("OfferFull_" + module.id, card, l10n.T("ui.slots_full"), 13, UiFactory.Danger, TextAnchor.MiddleRight, new Vector2(20f, 184f), new Vector2(440f, 26f), FontStyle.Bold);
+            }
+
+            ui.Text("InstalledTitle", panel, l10n.T("ui.port_installed", state.installedModules.Count.ToString()), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(50f, 210f), new Vector2(800f, 36f), FontStyle.Bold);
+            var list = new StringBuilder();
+            for (var i = 0; i < state.installedModules.Count; i++)
+            {
+                var module = ContentCatalog.GetModule(state.installedModules[i]);
+                if (module == null) continue;
+                if (list.Length > 0) list.Append("     ");
+                list.Append("◆ ").Append(l10n.T(module.nameKey));
+            }
+            ui.Text("InstalledList", panel, list.Length > 0 ? list.ToString() : l10n.T("ui.port_none"), 16, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                new Vector2(50f, 150f), new Vector2(1500f, 60f));
+
+            var depart = ui.Button("DepartPort", panel, l10n.T("ui.port_depart"), ConfirmPort, new Vector2(1150f, 40f), new Vector2(400f, 70f), UiFactory.Brass, UiFactory.Ink, 20);
+            depart.interactable = true;
+            AddLastReport(new Vector2(210f, 130f), new Vector2(900f, 60f));
         }
 
         private void ShowEncounter()
@@ -789,13 +862,7 @@ namespace AetherArk.Runtime
         private string FormatAlert()
         {
             var state = controller.Simulation.State;
-            var argument = state.combatAlertArgument;
-            if (Enum.TryParse(argument, out ShipSystemType system))
-            {
-                var systemState = state.playerShip.GetSystem(system) ?? state.enemyShip?.GetSystem(system);
-                if (systemState != null) argument = l10n.T(systemState.displayKey);
-            }
-            else if (!string.IsNullOrEmpty(argument) && argument.StartsWith("squadron.", StringComparison.Ordinal)) argument = l10n.T(argument);
+            var argument = TranslateArgument(state.combatAlertArgument);
             var alert = l10n.T(state.combatAlertKey, argument);
             return state.combatAlertPausedBattle ? l10n.T("ui.paused_by_warning") + "\n" + alert : alert;
         }
@@ -834,15 +901,25 @@ namespace AetherArk.Runtime
 
         private string FormatLog(CombatLogEntry entry)
         {
-            var argument = entry.argument;
-            if (Enum.TryParse(argument, out ShipSystemType system))
+            return l10n.T(entry.key, TranslateArgument(entry.argument));
+        }
+
+        /// <summary>
+        /// Log and alert arguments are raw identifiers: a system or altitude enum name, a localization key
+        /// (squadron., module., ship.) or a plain value such as a number or a crew name. Numeric strings must
+        /// not be parsed as enums, or "2" would become the second ship system.
+        /// </summary>
+        private string TranslateArgument(string argument)
+        {
+            if (string.IsNullOrEmpty(argument) || char.IsDigit(argument[0]) || argument[0] == '-') return argument;
+            if (Enum.TryParse(argument, out ShipSystemType system) && Enum.IsDefined(typeof(ShipSystemType), system))
             {
                 var state = controller.Simulation.State.playerShip.GetSystem(system) ?? controller.Simulation.State.enemyShip?.GetSystem(system);
-                if (state != null) argument = l10n.T(state.displayKey);
+                if (state != null) return l10n.T(state.displayKey);
             }
-            else if (Enum.TryParse(argument, out AltitudeBand altitude)) argument = l10n.EnumName(altitude);
-            else if (!string.IsNullOrEmpty(argument) && argument.StartsWith("squadron.", StringComparison.Ordinal)) argument = l10n.T(argument);
-            return l10n.T(entry.key, argument);
+            if (Enum.TryParse(argument, out AltitudeBand altitude) && Enum.IsDefined(typeof(AltitudeBand), altitude)) return l10n.EnumName(altitude);
+            var translated = l10n.T(argument);
+            return translated != argument ? translated : argument;
         }
 
         private void ShowEnding(bool victory)

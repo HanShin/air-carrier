@@ -3,7 +3,8 @@ using System.Collections.Generic;
 
 namespace AetherArk.Core
 {
-    public enum GamePhase { MainMenu, RouteMap, Encounter, Combat, Victory, Defeat }
+    public enum GamePhase { MainMenu, RouteMap, Encounter, Combat, Victory, Defeat, Port }
+    public enum ModuleCategory { Hull, Core, Weapons, Deck, Sensors, Engineering, Bridge, Marines }
     public enum Difficulty { Story, Standard, Harsh }
     public enum Language { Korean, English }
     public enum AltitudeBand { Low, Medium, High }
@@ -101,6 +102,7 @@ namespace AetherArk.Core
         public string displayName;
         public string nameKey;
         public bool boardingCapable;
+        public int moduleSlots = 4;
         public float hull;
         public float maxHull;
         public float armor;
@@ -234,6 +236,43 @@ namespace AetherArk.Core
     }
 
     [Serializable]
+    public sealed class ModuleDefinition
+    {
+        public string id;
+        public string nameKey;
+        public string descriptionKey;
+        public ModuleCategory category;
+        public int tier = 1;
+        public int cost = 8;
+        // Flat bonuses applied on install.
+        public float maxHull;
+        public float maxArmor;
+        public float maxWard;
+        public int coreOutput;
+        public int squadronStrength;
+        public float crewHealth;
+        // Multipliers (1 = no change) and bonuses consulted by the rules through ModuleRules.Modifiers.
+        public float weaponDamage = 1f;
+        public float weaponCooldown = 1f;
+        public float accuracy;
+        public bool weatherResistance;
+        public float wardRegen = 1f;
+        public float repairRate = 1f;
+        public float healRate = 1f;
+        public float autoRepair;
+        public bool fireResistance;
+        public bool oxygenReserve;
+        public float squadronTime = 1f;
+        public int interceptCharges;
+        public float reconSeconds;
+        public int salvageReward;
+        public bool aetherDiscount;
+        public float boardingDefense = 1f;
+        public float assaultBonus;
+        public float instabilityDecay = 1f;
+    }
+
+    [Serializable]
     public sealed class RegionDefinition
     {
         public string id;
@@ -298,6 +337,7 @@ namespace AetherArk.Core
         public int stormColumn = -1;
         public string currentNodeId = "n0_1";
         public string activeEncounterId;
+        public List<string> installedModules = new List<string>();
         public StrategicResources resources = new StrategicResources();
         public ConvoyState convoy = new ConvoyState();
         public ShipState playerShip;

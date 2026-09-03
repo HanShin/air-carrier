@@ -63,11 +63,17 @@ namespace AetherArk.Core
         public RouteNodeState CurrentNode => State.routeNodes.Find(node => node.id == State.currentNodeId);
         public EncounterDefinition ActiveEncounter => ContentCatalog.GetEncounter(State.activeEncounterId);
 
+        public int TravelCost(RouteNodeState target)
+        {
+            if (target == null) return 0;
+            return ModuleRules.Modifiers(State).aetherDiscount ? Math.Max(1, target.aetherCost - 1) : target.aetherCost;
+        }
+
         public bool CanTravelTo(RouteNodeState target)
         {
             if (target == null || State.phase != GamePhase.RouteMap || target.blocked || target.visited) return false;
             var current = CurrentNode;
-            return current != null && current.connectedIds.Contains(target.id) && State.resources.aether >= target.aetherCost;
+            return current != null && current.connectedIds.Contains(target.id) && State.resources.aether >= TravelCost(target);
         }
 
         public bool HasAffordableRoute()
@@ -86,7 +92,7 @@ namespace AetherArk.Core
             var target = State.routeNodes.Find(node => node.id == nodeId);
             if (!CanTravelTo(target)) return CommandResult.Fail("command.route_unavailable");
 
-            State.resources.aether -= target.aetherCost;
+            State.resources.aether -= TravelCost(target);
             State.currentNodeId = target.id;
             target.visited = true;
             State.travelCount++;
@@ -199,6 +205,33 @@ namespace AetherArk.Core
             if (outcome.id == "ride") ship.instability = Math.Max(0f, ship.instability - 20f);
         }
 
+        public CommandResult PurchaseModule(string moduleId)
+        {
+            if (State.phase != GamePhase.Port) return CommandResult.Fail("command.port_only");
+            var module = ContentCatalog.GetModule(moduleId);
+            if (module == null) return CommandResult.Fail("command.module_unknown");
+            if (State.installedModules.Contains(moduleId)) return CommandResult.Fail("command.module_installed");
+            if (State.installedModules.Count >= State.playerShip.moduleSlots) return CommandResult.Fail("command.module_slots");
+            if (State.resources.salvage < module.cost) return CommandResult.Fail("command.module_cost");
+            State.resources.salvage -= module.cost;
+            State.installedModules.Add(moduleId);
+            ModuleRules.ApplyFlatBonuses(State, module);
+            AddLog("log.module_installed", module.nameKey);
+            return CommandResult.Ok("command.module_bought");
+        }
+
+        public List<string> PortOffers()
+        {
+            return ContentCatalog.OfferModules(State.seed, State.regionIndex, State.installedModules);
+        }
+
+        public CommandResult DepartPort()
+        {
+            if (State.phase != GamePhase.Port) return CommandResult.Fail("command.invalid_phase");
+            State.phase = GamePhase.RouteMap;
+            return CommandResult.Ok();
+        }
+
         public CommandResult SkipEncounter()
         {
             if (State.phase != GamePhase.Encounter) return CommandResult.Fail("command.invalid_phase");
@@ -264,8 +297,9 @@ namespace AetherArk.Core
             State.enemySquadronCooldown = 10f;
             State.altitudeCooldown = 0f;
             State.weatherHazardTimer = ContentCatalog.GetWeather(State.currentWeather).hazardInterval;
-            State.interceptCharges = 0;
-            State.reconBonusSeconds = 0f;
+            var startModifiers = ModuleRules.Modifiers(State);
+            State.interceptCharges = startModifiers.interceptCharges;
+            State.reconBonusSeconds = startModifiers.reconSeconds;
             State.combatLog.Clear();
             ClearCombatAlert();
             AddLog(finalBattle ? "log.gate_battle" : "log.combat_started");
@@ -305,7 +339,7 @@ namespace AetherArk.Core
             TickWard(State.enemyShip, dt);
             TickSquadrons(dt);
 
-            State.playerShip.instability = Math.Max(0f, State.playerShip.instability - dt * 0.45f);
+            State.playerShip.instability = Math.Max(0f, State.playerShip.instability - dt * 0.45f * ModuleRules.Modifiers(State).instabilityDecay);
             if (State.weatherHazardTimer <= 0f) ResolveWeatherHazard();
             if (State.enemyWeaponCooldown <= 0f) EnemyFire();
             if (State.enemySquadronCooldown <= 0f) EnemySquadronStrike();
@@ -341,22 +375,31 @@ namespace AetherArk.Core
             if (ward == null || ward.EffectivePower <= 0) return;
             var profile = ContentCatalog.GetWeather(State.currentWeather);
             var altitudeModifier = ship.altitude == AltitudeBand.High ? 1.15f : ship.altitude == AltitudeBand.Low ? 0.9f : 1f;
-            ship.ward = Math.Min(ship.maxWard, ship.ward + dt * ward.EffectivePower * 0.22f * profile.wardRegenModifier * altitudeModifier);
+            var moduleRegen = ship == State.playerShip ? ModuleRules.Modifiers(State).wardRegen : 1f;
+            ship.ward = Math.Min(ship.maxWard, ship.ward + dt * ward.EffectivePower * 0.22f * profile.wardRegenModifier * altitudeModifier * moduleRegen);
         }
 
         private void TickRooms(float dt)
         {
             var lifeSupport = State.playerShip.GetSystem(ShipSystemType.LifeSupport);
             var lifePowered = lifeSupport != null && lifeSupport.EffectivePower > 0;
+            var modifiers = ModuleRules.Modifiers(State);
             for (var i = 0; i < State.playerShip.rooms.Count; i++)
             {
                 var room = State.playerShip.rooms[i];
                 var oxygenDelta = lifePowered ? 4f : -1.5f;
-                oxygenDelta -= room.breach * 0.08f;
-                oxygenDelta -= room.fire * 0.025f;
+                var loss = room.breach * 0.08f + room.fire * 0.025f;
+                if (modifiers.oxygenReserve) loss *= 0.5f;
+                oxygenDelta -= loss;
+                if (!lifePowered && modifiers.oxygenReserve) oxygenDelta = -0.75f - loss;
                 room.oxygen = Clamp(room.oxygen + oxygenDelta * dt, 0f, 100f);
-                if (room.fire > 0f) room.fire = Math.Min(100f, room.fire + dt * 0.35f);
+                if (room.fire > 0f) room.fire = Math.Min(100f, room.fire + dt * 0.35f * (modifiers.fireResistance ? 0.5f : 1f));
                 if (room.intruders > 0) TickIntruders(room, dt);
+                if (modifiers.autoRepair > 0f)
+                {
+                    var system = State.playerShip.GetSystem(room.system);
+                    if (system != null) system.damage = Math.Max(0f, system.damage - modifiers.autoRepair * dt);
+                }
             }
         }
 
@@ -374,7 +417,7 @@ namespace AetherArk.Core
 
             if (defenders > 0)
             {
-                room.intruderProgress += dt * (0.35f * defenders + (marinePresent ? 0.6f : 0f));
+                room.intruderProgress += dt * (0.35f * defenders + (marinePresent ? 0.6f : 0f)) * ModuleRules.Modifiers(State).boardingDefense;
                 while (room.intruderProgress >= 1f && room.intruders > 0)
                 {
                     room.intruderProgress -= 1f;
@@ -413,12 +456,13 @@ namespace AetherArk.Core
                 var system = State.playerShip.GetSystem(crew.currentRoom);
                 if (room == null || system == null) continue;
 
-                var repairRate = CrewRepairRate(crew);
+                var crewModifiers = ModuleRules.Modifiers(State);
+                var repairRate = CrewRepairRate(crew) * crewModifiers.repairRate;
                 system.damage = Math.Max(0f, system.damage - repairRate * dt);
                 room.fire = Math.Max(0f, room.fire - repairRate * 0.8f * dt);
                 room.breach = Math.Max(0f, room.breach - repairRate * 0.55f * dt);
 
-                var danger = room.fire * 0.018f + (room.oxygen < 22f ? 3.2f : 0f) + room.intruders * 1.5f;
+                var danger = room.fire * 0.018f * (crewModifiers.fireResistance ? 0.5f : 1f) + (room.oxygen < 22f ? 3.2f : 0f) + room.intruders * 1.5f;
                 if (crew.lineage == CrewLineage.Dwarf) danger *= 0.72f;
                 if (crew.lineage == CrewLineage.Avian && room.oxygen < 22f) danger *= 0.5f;
                 crew.health = Math.Max(0f, crew.health - danger * dt);
@@ -431,7 +475,7 @@ namespace AetherArk.Core
                 {
                     var crew = State.crew[i];
                     if (!crew.isDead && !crew.onSortie && crew.currentRoom == ShipSystemType.Infirmary && crew.health > 0f)
-                        crew.health = Math.Min(crew.maxHealth, crew.health + dt * (2f + infirmary.EffectivePower));
+                        crew.health = Math.Min(crew.maxHealth, crew.health + dt * (2f + infirmary.EffectivePower) * ModuleRules.Modifiers(State).healRate);
                 }
             }
         }
@@ -506,7 +550,7 @@ namespace AetherArk.Core
 
             State.selectedEnemySystem = target;
             State.hasFiredWeapon = true;
-            State.playerWeaponCooldown = Math.Max(2.2f, 5.2f - weapons.EffectivePower * 0.55f);
+            State.playerWeaponCooldown = Math.Max(2.2f, 5.2f - weapons.EffectivePower * 0.55f) * ModuleRules.Modifiers(State).weaponCooldown;
             var random = State.random.combat;
             var hit = SeededRandom.Chance(ref random, Accuracy(State.playerShip, State.enemyShip, true));
             State.random.combat = random;
@@ -516,11 +560,18 @@ namespace AetherArk.Core
                 return CommandResult.Ok("command.weapon_fired");
             }
 
-            var damage = 3.5f + weapons.EffectivePower * 0.7f;
-            ApplyDamage(State.enemyShip, target, damage, false);
+            ApplyDamage(State.enemyShip, target, PlayerShotDamage(), false);
             AddLog("log.player_hit", target.ToString());
             if (State.enemyShip.IsDestroyed) ResolveVictory();
             return CommandResult.Ok("command.weapon_fired");
+        }
+
+        /// <summary>Main-battery damage per hit: base by weapon power, multiplied by installed weapon modules.</summary>
+        public float PlayerShotDamage()
+        {
+            var weapons = State.playerShip?.GetSystem(ShipSystemType.Weapons);
+            if (weapons == null) return 0f;
+            return (3.5f + weapons.EffectivePower * 0.7f) * ModuleRules.Modifiers(State).weaponDamage;
         }
 
         private void EnemyFire()
@@ -565,9 +616,11 @@ namespace AetherArk.Core
             var engines = defender.GetSystem(ShipSystemType.Engines);
             var weather = ContentCatalog.GetWeather(State.currentWeather);
             var value = 0.72f + (sensors?.EffectivePower ?? 0) * 0.035f - (engines?.EffectivePower ?? 0) * 0.025f;
-            value += weather.accuracyModifier;
+            var accuracyModifiers = playerAttack ? ModuleRules.Modifiers(State) : ModuleModifiers.None;
+            value += weather.accuracyModifier < 0f && accuracyModifiers.weatherResistance ? weather.accuracyModifier * 0.5f : weather.accuracyModifier;
             value -= Math.Abs((int)attacker.altitude - (int)defender.altitude) * 0.07f;
             if (playerAttack && State.reconBonusSeconds > 0f) value += 0.16f;
+            value += accuracyModifiers.accuracy;
             return Clamp(value, 0.2f, 0.96f);
         }
 
@@ -602,7 +655,7 @@ namespace AetherArk.Core
             squadron.mission = mission;
             squadron.targetSystem = target;
             squadron.status = SquadronStatus.Launching;
-            squadron.missionTimer = Math.Max(0.8f, 2.2f - deck.EffectivePower * 0.3f);
+            squadron.missionTimer = Math.Max(0.8f, 2.2f - deck.EffectivePower * 0.3f) * ModuleRules.Modifiers(State).squadronTime;
             squadron.phaseDuration = squadron.missionTimer;
             var pilot = State.crew.Find(crew => crew.id == squadron.pilotCrewId);
             if (pilot != null) pilot.onSortie = true;
@@ -676,7 +729,7 @@ namespace AetherArk.Core
                     break;
                 case SquadronMission.Assault:
                     var system = State.enemyShip.GetSystem(squadron.targetSystem);
-                    if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + 32f);
+                    if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + 32f + ModuleRules.Modifiers(State).assaultBonus);
                     State.enemyShip.hull = Math.Max(0f, State.enemyShip.hull - 1f);
                     AddLog("log.assault", squadron.targetSystem.ToString());
                     break;
@@ -928,7 +981,7 @@ namespace AetherArk.Core
         {
             if (State.phase != GamePhase.Combat) return;
             State.isPaused = true;
-            var reward = State.isFinalBattle ? 0 : (State.difficulty == Difficulty.Harsh ? 7 : 9);
+            var reward = State.isFinalBattle ? 0 : (State.difficulty == Difficulty.Harsh ? 7 : 9) + ModuleRules.Modifiers(State).salvageReward;
             State.resources.salvage += reward;
             State.resources.ordnance += State.isFinalBattle ? 0 : (State.regionIndex >= 3 ? 2 : 1);
             for (var i = 0; i < State.crew.Count; i++) State.crew[i].onSortie = false;
@@ -961,13 +1014,13 @@ namespace AetherArk.Core
             State.activeEncounterId = null;
             State.enemyShip = null;
             State.isFinalBattle = false;
-            State.phase = GamePhase.RouteMap;
+            State.phase = GamePhase.Port;
 
             // Port refit: the flagship grows with every gate it passes, so later regions are survivable.
             var ship = State.playerShip;
-            ship.maxHull += 3f;
-            ship.maxArmor += 2f;
-            ship.maxWard += 2f;
+            ship.maxHull += 2f;
+            ship.maxArmor += 1f;
+            ship.maxWard += 1f;
             ship.coreOutput += 1;
             var weapons = ship.GetSystem(ShipSystemType.Weapons);
             if (weapons != null && weapons.power < weapons.maxPower && ship.AllocatedPower() < ship.coreOutput) weapons.power++;
