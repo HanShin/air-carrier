@@ -500,6 +500,57 @@ namespace AetherArk.Tests
             Assert.That(simulation.State.enemyShip.GetRoom(ShipSystemType.FlightDeck).fire, Is.GreaterThan(10f));
         }
 
+        [Test]
+        public void RouteRules_NextStormColumnFollowsTheTravelCount()
+        {
+            var state = new RunState { travelCount = 0 };
+            Assert.That(RouteRules.NextStormColumn(state), Is.EqualTo(-1));
+            state.travelCount = 2;
+            Assert.That(RouteRules.NextStormColumn(state), Is.EqualTo(0));
+            state.travelCount = 5;
+            Assert.That(RouteRules.NextStormColumn(state), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void RouteRules_StormColumnAfterTravelMatchesPrediction()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 41234);
+            for (var jump = 0; jump < 3; jump++)
+            {
+                var predicted = RouteRules.NextStormColumn(simulation.State);
+                var destination = simulation.State.routeNodes.Find(simulation.CanTravelTo);
+                Assert.That(destination, Is.Not.Null);
+                simulation.TravelTo(destination.id);
+                Assert.That(simulation.State.stormColumn, Is.EqualTo(predicted));
+                if (simulation.State.phase != GamePhase.RouteMap) break;
+            }
+        }
+
+        [TestCase(EncounterType.Start, "node.departure")]
+        [TestCase(EncounterType.EliteBattle, "node.elitebattle")]
+        [TestCase(EncounterType.Gate, "node.gate")]
+        public void RouteRules_NameKeysResolveInBothLanguages(EncounterType type, string expectedKey)
+        {
+            Assert.That(RouteRules.NameKey(type), Is.EqualTo(expectedKey));
+            Assert.That(new LocalizationService(Language.Korean).T(expectedKey), Is.Not.EqualTo(expectedKey));
+            Assert.That(new LocalizationService(Language.English).T(expectedKey), Is.Not.EqualTo(expectedKey));
+        }
+
+        [Test]
+        public void RouteRules_EveryEncounterTypeHasADistinctGlyphExceptBattleTiers()
+        {
+            var glyphs = new System.Collections.Generic.HashSet<string>();
+            foreach (EncounterType type in Enum.GetValues(typeof(EncounterType)))
+            {
+                var glyph = RouteRules.Glyph(type);
+                Assert.That(glyph, Is.Not.Empty);
+                if (type != EncounterType.EliteBattle) Assert.That(glyphs.Add(glyph), Is.True, type + " shares a glyph");
+            }
+            Assert.That(RouteRules.Glyph(EncounterType.EliteBattle), Is.EqualTo(RouteRules.Glyph(EncounterType.Battle)));
+        }
+
         [TestCase(WeatherType.Thunderhead, -0.08f)]
         [TestCase(WeatherType.Turbulence, -0.12f)]
         [TestCase(WeatherType.AetherCurrent, 0.04f)]

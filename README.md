@@ -11,6 +11,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - Air-wing feedback: launch/mission/return progress, target labels, recovery notices, and pilot sortie state.
 - Warning UX: localized severity banner, explicit auto-pause reason, in-combat auto-pause toggle, and warning context that remains visible until combat resumes.
 
+- Route map drawn as a star map: circular nodes with encounter glyphs and a numbered badge on reachable nodes, a storm-front band over closed columns plus an amber warning band for the column that closes after the next jump, a legend, and a select-then-depart preview panel (aether cost vs stock, weather modifiers, recommended altitude, threat note). Number keys still jump immediately.
 - Runtime-built Korean/English UI with no scene assembly required.
 - Branching route map with storm closure, aether costs, weather, altitude recommendations, events, trading, rescue, and combat nodes.
 - Layered ward → armor → hull damage, ten ship compartments, fires, breaches, oxygen, repairs, crew injury, rescue windows, and captain-loss defeat.
@@ -41,7 +42,7 @@ Keyboard access for the current slice:
 
 Emergency ordnance first consumes salvage, then supplies, then lives. It adds instability and costs morale, but guarantees that an empty magazine cannot permanently trap a run in combat.
 
-Development builds accept `-debug-combat [cutter|carrier|cruiser]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation.
+Development builds accept `-debug-combat [cutter|carrier|cruiser]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation. `-debug-route [jumps]` opens the route map after auto-resolving that many jumps so storm bands and visited nodes are visible.
 
 Default pause is `Space`; it can be changed to `P` during expedition setup. Save files are written under `Application.persistentDataPath` as `profile.json` and `suspended_run.json`.
 

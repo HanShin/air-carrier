@@ -39,10 +39,43 @@ namespace AetherArk.Runtime
         /// against the requested enemy on a post-tutorial profile so the combat screen can be inspected
         /// without keyboard automation. Ignored in release builds.
         /// </summary>
+        /// <summary>
+        /// `-debug-route [jumps]` opens the route map on a post-tutorial run after auto-resolving the
+        /// given number of jumps, so storm bands, visited and blocked nodes can be inspected.
+        /// </summary>
+        private bool TryDebugRouteLaunch(string[] args)
+        {
+            var index = Array.IndexOf(args, "-debug-route");
+            if (index < 0) return false;
+            var jumps = index + 1 < args.Length && int.TryParse(args[index + 1], out var parsed) ? parsed : 0;
+            Profile.tutorialSeen = true;
+            Simulation = GameSimulation.NewRun(Profile, 41234);
+            for (var jump = 0; jump < jumps && Simulation.State.phase == GamePhase.RouteMap; jump++)
+            {
+                var nodes = Simulation.State.routeNodes;
+                var destination = nodes.Find(node => Simulation.CanTravelTo(node) && !RouteRules.IsHostile(node.encounterType))
+                                  ?? nodes.Find(Simulation.CanTravelTo);
+                if (destination == null) break;
+                Simulation.TravelTo(destination.id);
+                if (Simulation.State.phase == GamePhase.Encounter) Simulation.SkipEncounter();
+                else if (Simulation.State.phase == GamePhase.Combat)
+                {
+                    Simulation.ApplyDamage(Simulation.State.enemyShip, ShipSystemType.AetherCore, 999f, true);
+                    Simulation.SetPaused(false);
+                    Simulation.Tick(0.1f);
+                }
+            }
+            Screen = FrontendScreen.Game;
+            previousPhase = Simulation.State.phase;
+            view.ShowGamePhase();
+            return true;
+        }
+
         private void TryDebugCombatLaunch()
         {
             if (!Debug.isDebugBuild) return;
             var args = Environment.GetCommandLineArgs();
+            if (TryDebugRouteLaunch(args)) return;
             var index = Array.IndexOf(args, "-debug-combat");
             if (index < 0) return;
             var wanted = index + 1 < args.Length && !args[index + 1].StartsWith("-") ? args[index + 1].ToLowerInvariant() : "cutter";
@@ -113,6 +146,11 @@ namespace AetherArk.Runtime
             switch (Simulation.State.phase)
             {
                 case GamePhase.RouteMap:
+                    if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+                    {
+                        view.ConfirmRouteSelection();
+                        return true;
+                    }
                     for (var i = 0; i < 9; i++)
                     {
                         if (!Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i))) continue;

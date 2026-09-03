@@ -91,6 +91,31 @@ namespace AetherArk.Tests
             controller.AbandonRun();
         }
 
+        [UnityTest]
+        public IEnumerator RouteMap_SelectingANodeShowsPreviewAndDepartTravels()
+        {
+            yield return null;
+            var controller = Object.FindFirstObjectByType<GameController>();
+            controller.StartRun();
+            yield return null;
+
+            Assert.That(GameObject.Find("Depart"), Is.Null, "No depart button should exist before a node is selected.");
+            var destination = controller.Simulation.State.routeNodes.Find(controller.Simulation.CanTravelTo);
+            Assert.That(destination, Is.Not.Null);
+            var startNode = controller.Simulation.State.currentNodeId;
+
+            ActivateButton("Node_" + destination.id);
+            yield return null;
+            Assert.That(controller.Simulation.State.currentNodeId, Is.EqualTo(startNode), "The first click must only select the node.");
+            Assert.That(GameObject.Find("PreviewName"), Is.Not.Null, "Selecting a node should open the preview panel.");
+
+            ActivateButton("Depart");
+            yield return null;
+            Assert.That(controller.Simulation.State.currentNodeId, Is.EqualTo(destination.id), "Depart should travel to the selected node.");
+
+            controller.AbandonRun();
+        }
+
         private static void ActivateButton(string objectName)
         {
             var target = GameObject.Find(objectName);

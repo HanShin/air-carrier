@@ -215,6 +215,22 @@ namespace AetherArk.Runtime
             return image;
         }
 
+        public Button CircleButton(string name, Transform parent, Vector2 position, Vector2 size, Color color, Action action)
+        {
+            var image = Circle(name, parent, position, size, color);
+            var button = image.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
+            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+            colors.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.8f);
+            colors.fadeDuration = 0f;
+            button.colors = colors;
+            if (action != null) button.onClick.AddListener(() => action());
+            return button;
+        }
+
         public RectTransform Rotated(string name, Transform parent, Vector2 center, Vector2 size, float degrees, Color color)
         {
             var rect = Rect(name, parent, center, size);

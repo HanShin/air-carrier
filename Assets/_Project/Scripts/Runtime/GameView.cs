@@ -14,6 +14,7 @@ namespace AetherArk.Runtime
         private readonly UiFactory ui;
         private readonly LocalizationService l10n;
         private string selectedCrewId;
+        private string selectedRouteNodeId;
         private ShipSystemType selectedPlayerSystem = ShipSystemType.Weapons;
         private ShipSystemType selectedEnemySystem = ShipSystemType.Weapons;
 
@@ -136,29 +137,80 @@ namespace AetherArk.Runtime
                 new Color(0.32f, 0.09f, 0.12f, 0.95f), UiFactory.TextPrimary, 14);
         }
 
+        private const float MapWidth = 1300f;
+        private const float MapHeight = 590f;
+
+        private static Vector2 NodeCenter(RouteNodeState node)
+        {
+            return new Vector2(110f + node.column * 154f, 470f - node.lane * 180f);
+        }
+
+        private static float ColumnBoundary(int column)
+        {
+            return column < 0 ? 0f : 110f + column * 154f + 77f;
+        }
+
+        public void ConfirmRouteSelection()
+        {
+            var simulation = controller.Simulation;
+            if (simulation == null || simulation.State.phase != GamePhase.RouteMap) return;
+            var node = simulation.State.routeNodes.Find(item => item.id == selectedRouteNodeId);
+            if (node != null && simulation.CanTravelTo(node)) controller.Travel(node.id);
+        }
+
+        private void SelectRouteNode(string nodeId)
+        {
+            if (selectedRouteNodeId == nodeId)
+            {
+                ConfirmRouteSelection();
+                return;
+            }
+            selectedRouteNodeId = nodeId;
+            ShowRoute();
+        }
+
+        private Color NodeFill(RouteNodeState node, bool current, bool available)
+        {
+            if (current) return UiFactory.Brass;
+            if (node.blocked) return new Color(0.34f, 0.08f, 0.15f, 0.98f);
+            if (available) return new Color(0.08f, 0.38f, 0.42f, 0.98f);
+            if (node.visited) return new Color(0.2f, 0.22f, 0.26f, 0.98f);
+            return new Color(0.07f, 0.1f, 0.15f, 0.98f);
+        }
+
         private void ShowRoute()
         {
             ui.Clear();
             ui.Background(controller.Background, new Color(0.02f, 0.03f, 0.07f, 0.58f));
             AddStatusBar();
-            ui.Text("RouteTitle", ui.Root, l10n.T("ui.route_title"), 38, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
-                new Vector2(84f, 905f), new Vector2(600f, 62f), FontStyle.Bold);
-            ui.Text("RouteHint", ui.Root, l10n.T("ui.route_hint"), 17, UiFactory.TextMuted, TextAnchor.MiddleLeft,
-                new Vector2(84f, 864f), new Vector2(1200f, 38f));
-
-            var routePanel = ui.PanelRect("RoutePanel", ui.Root, new Vector2(70f, 190f), new Vector2(1780f, 650f), PanelColor);
             var state = controller.Simulation.State;
-            var positions = new Dictionary<string, Vector2>();
-            for (var i = 0; i < state.routeNodes.Count; i++) positions[state.routeNodes[i].id] = NodePosition(state.routeNodes[i]);
+            if (!string.IsNullOrEmpty(selectedRouteNodeId) && !state.routeNodes.Exists(node => node.id == selectedRouteNodeId && !node.blocked))
+                selectedRouteNodeId = null;
+
+            ui.Text("RouteTitle", ui.Root, l10n.T("ui.route_title"), 34, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                new Vector2(84f, 900f), new Vector2(700f, 56f), FontStyle.Bold);
+            ui.Text("RouteHint", ui.Root, l10n.T("ui.route_select_hint") + "  " + l10n.T("ui.route_hint"), 15, UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                new Vector2(84f, 862f), new Vector2(1500f, 34f));
+
+            var map = ui.PanelRect("RoutePanel", ui.Root, new Vector2(70f, 250f), new Vector2(MapWidth, MapHeight), PanelColor);
+            DrawStormFront(map, state);
+
+            var centers = new Dictionary<string, Vector2>();
+            for (var i = 0; i < state.routeNodes.Count; i++) centers[state.routeNodes[i].id] = NodeCenter(state.routeNodes[i]);
 
             for (var i = 0; i < state.routeNodes.Count; i++)
             {
                 var node = state.routeNodes[i];
+                var isCurrent = node.id == state.currentNodeId;
                 for (var j = 0; j < node.connectedIds.Count; j++)
                 {
-                    if (positions.TryGetValue(node.connectedIds[j], out var target))
-                        ui.Line(routePanel, positions[node.id] + new Vector2(70f, 36f), target + new Vector2(70f, 36f), 3f,
-                            node.blocked ? new Color(0.35f, 0.12f, 0.25f, 0.5f) : new Color(0.35f, 0.56f, 0.62f, 0.52f));
+                    var target = state.routeNodes.Find(item => item.id == node.connectedIds[j]);
+                    if (target == null || !centers.ContainsKey(target.id)) continue;
+                    var highlighted = isCurrent && controller.Simulation.CanTravelTo(target);
+                    var color = highlighted ? new Color(0.92f, 0.68f, 0.27f, 0.9f)
+                        : node.blocked || target.blocked ? new Color(0.45f, 0.1f, 0.18f, 0.45f)
+                        : new Color(0.35f, 0.56f, 0.62f, 0.35f);
+                    ui.Line(map, centers[node.id], centers[target.id], highlighted ? 3f : 2f, color);
                 }
             }
 
@@ -168,18 +220,51 @@ namespace AetherArk.Runtime
                 var node = state.routeNodes[i];
                 var available = controller.Simulation.CanTravelTo(node);
                 var current = node.id == state.currentNodeId;
-                var label = l10n.T(node.nameKey);
-                if (available) label = $"[{++availableNumber}] " + label;
-                if (current) label += "\n" + l10n.T("ui.current");
-                else if (node.blocked) label += "\n" + l10n.T("ui.blocked");
-                else label += $"\n{l10n.T("ui.cost", node.aetherCost.ToString())} · {l10n.EnumName(node.recommendedAltitude)}\n{l10n.T(ContentCatalog.GetWeather(node.weather).nameKey)}";
+                var selected = node.id == selectedRouteNodeId;
+                var center = centers[node.id];
+                var diameter = node.encounterType == EncounterType.Gate ? 76f : 64f;
+                var half = diameter / 2f;
 
-                var color = current ? UiFactory.Brass : node.blocked ? new Color(0.34f, 0.08f, 0.15f, 0.95f) : available ? new Color(0.08f, 0.38f, 0.42f, 0.98f) : UiFactory.PanelSoft;
+                if (selected) ui.Circle("SelectRing_" + node.id, map, center - new Vector2(half + 6f, half + 6f), new Vector2(diameter + 12f, diameter + 12f), Color.white).raycastTarget = false;
+                var ringColor = current ? Color.white : available ? UiFactory.Brass : node.encounterType == EncounterType.Gate ? UiFactory.Brass
+                    : node.encounterType == EncounterType.EliteBattle ? UiFactory.Danger : new Color(0.2f, 0.26f, 0.32f, 0.9f);
+                ui.Circle("Ring_" + node.id, map, center - new Vector2(half + 3f, half + 3f), new Vector2(diameter + 6f, diameter + 6f), ringColor).raycastTarget = false;
+                if (node.encounterType == EncounterType.EliteBattle || node.encounterType == EncounterType.Gate)
+                {
+                    ui.Circle("RingGap_" + node.id, map, center - new Vector2(half, half), new Vector2(diameter, diameter), UiFactory.Ink).raycastTarget = false;
+                    ui.Circle("Ring2_" + node.id, map, center - new Vector2(half - 3f, half - 3f), new Vector2(diameter - 6f, diameter - 6f), ringColor).raycastTarget = false;
+                }
+                var inner = node.encounterType == EncounterType.EliteBattle || node.encounterType == EncounterType.Gate ? diameter - 12f : diameter;
                 var localNode = node;
-                var button = ui.Button("Node_" + node.id, routePanel, label, () => controller.Travel(localNode.id),
-                    positions[node.id], new Vector2(140f, 74f), color, current ? UiFactory.Ink : UiFactory.TextPrimary, 14);
-                button.interactable = available;
+                var button = ui.CircleButton("Node_" + node.id, map, center - new Vector2(inner / 2f, inner / 2f), new Vector2(inner, inner),
+                    NodeFill(node, current, available), () => SelectRouteNode(localNode.id));
+                button.interactable = !node.blocked;
+
+                var glyphColor = current ? UiFactory.Ink : node.encounterType == EncounterType.Gate ? UiFactory.Brass
+                    : RouteRules.IsHostile(node.encounterType) ? UiFactory.Danger : UiFactory.TextPrimary;
+                if (node.blocked || node.visited && !current) glyphColor = new Color(glyphColor.r, glyphColor.g, glyphColor.b, 0.55f);
+                ui.Text("Glyph_" + node.id, map, RouteRules.Glyph(node.encounterType), 26, glyphColor, TextAnchor.MiddleCenter,
+                    center - new Vector2(half, half), new Vector2(diameter, diameter), FontStyle.Bold);
+
+                if (available)
+                {
+                    var badgePosition = center + new Vector2(half - 14f, half - 14f);
+                    ui.Circle("Badge_" + node.id, map, badgePosition, new Vector2(24f, 24f), UiFactory.Brass).raycastTarget = false;
+                    ui.Text("BadgeText_" + node.id, map, (++availableNumber).ToString(), 13, UiFactory.Ink, TextAnchor.MiddleCenter,
+                        badgePosition, new Vector2(24f, 24f), FontStyle.Bold);
+                }
+
+                var nameColor = current ? UiFactory.Brass : node.blocked ? new Color(0.7f, 0.35f, 0.4f, 1f) : node.visited ? UiFactory.TextMuted : UiFactory.TextPrimary;
+                ui.Text("NodeName_" + node.id, map, l10n.T(node.nameKey), 13, nameColor, TextAnchor.MiddleCenter,
+                    center - new Vector2(80f, half + 24f), new Vector2(160f, 20f), FontStyle.Bold);
+                var detail = current ? l10n.T("ui.current") : node.blocked ? l10n.T("ui.blocked") : node.visited ? l10n.T("ui.visited")
+                    : $"{l10n.T("ui.cost", node.aetherCost.ToString())} · {l10n.T(ContentCatalog.GetWeather(node.weather).nameKey)}";
+                ui.Text("NodeDetail_" + node.id, map, detail, 11, current ? UiFactory.Brass : UiFactory.TextMuted, TextAnchor.MiddleCenter,
+                    center - new Vector2(80f, half + 42f), new Vector2(160f, 18f));
             }
+
+            DrawRouteLegend();
+            DrawRoutePreview(state);
 
             ui.Button("FieldRepair", ui.Root, l10n.T("ui.field_repair"), controller.FieldRepair,
                 new Vector2(80f, 80f), new Vector2(350f, 70f));
@@ -198,9 +283,104 @@ namespace AetherArk.Runtime
             }
         }
 
-        private static Vector2 NodePosition(RouteNodeState node)
+        private void DrawStormFront(RectTransform map, RunState state)
         {
-            return new Vector2(55f + node.column * 220f, 470f - node.lane * 170f);
+            var stormEdge = ColumnBoundary(state.stormColumn);
+            var nextColumn = RouteRules.NextStormColumn(state);
+            var nextEdge = ColumnBoundary(nextColumn);
+            if (nextColumn > state.stormColumn && nextEdge > stormEdge)
+            {
+                var warn = ui.PanelRect("StormNext", map, new Vector2(stormEdge, 0f), new Vector2(nextEdge - stormEdge, MapHeight), new Color(0.85f, 0.55f, 0.15f, 0.08f));
+                warn.GetComponent<Image>().raycastTarget = false;
+                ui.Text("StormNextLabel", map, l10n.T("ui.storm_next"), 12, new Color(0.95f, 0.7f, 0.3f, 0.9f), TextAnchor.MiddleCenter,
+                    new Vector2(stormEdge, 6f), new Vector2(nextEdge - stormEdge, 20f), FontStyle.Bold);
+            }
+            if (state.stormColumn < 0) return;
+            var band = ui.PanelRect("StormBand", map, Vector2.zero, new Vector2(stormEdge, MapHeight), new Color(0.55f, 0.06f, 0.14f, 0.3f));
+            band.GetComponent<Image>().raycastTarget = false;
+            var reduced = controller.Profile.accessibility.reducedMotion;
+            for (var y = 14f; y < MapHeight; y += 34f)
+                ui.Rotated("StormTooth", map, new Vector2(stormEdge, y), new Vector2(reduced ? 18f : 24f, reduced ? 18f : 24f), 45f, new Color(0.65f, 0.08f, 0.16f, 0.35f));
+            ui.Text("StormLabel", map, l10n.T("ui.storm_front"), 15, UiFactory.Danger, TextAnchor.MiddleCenter,
+                new Vector2(Math.Max(0f, stormEdge - 180f), MapHeight - 34f), new Vector2(Math.Min(180f, stormEdge), 26f), FontStyle.Bold);
+        }
+
+        private void DrawRouteLegend()
+        {
+            var types = new[] { EncounterType.Battle, EncounterType.EliteBattle, EncounterType.Rescue, EncounterType.Salvage,
+                EncounterType.Trade, EncounterType.Checkpoint, EncounterType.Storm, EncounterType.Gate };
+            ui.Text("LegendTitle", ui.Root, l10n.T("ui.legend"), 12, UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(84f, 208f), new Vector2(60f, 30f), FontStyle.Bold);
+            for (var i = 0; i < types.Length; i++)
+            {
+                var x = 150f + i * 150f;
+                var color = RouteRules.IsHostile(types[i]) ? UiFactory.Danger : types[i] == EncounterType.Gate ? UiFactory.Brass : UiFactory.TextPrimary;
+                ui.Circle("LegendDot_" + i, ui.Root, new Vector2(x, 210f), new Vector2(26f, 26f), new Color(0.08f, 0.16f, 0.22f, 0.98f)).raycastTarget = false;
+                ui.Text("LegendGlyph_" + i, ui.Root, RouteRules.Glyph(types[i]), 14, color, TextAnchor.MiddleCenter, new Vector2(x, 210f), new Vector2(26f, 26f), FontStyle.Bold);
+                ui.Text("LegendName_" + i, ui.Root, l10n.T(RouteRules.NameKey(types[i])), 12, UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                    new Vector2(x + 32f, 208f), new Vector2(116f, 30f));
+            }
+        }
+
+        private void DrawRoutePreview(RunState state)
+        {
+            var panel = ui.PanelRect("RoutePreview", ui.Root, new Vector2(1390f, 250f), new Vector2(460f, MapHeight), PanelColor);
+            var node = state.routeNodes.Find(item => item.id == selectedRouteNodeId);
+            var current = controller.Simulation.CurrentNode;
+            var currentName = current != null ? l10n.T(current.nameKey) : string.Empty;
+            ui.Text("PreviewCurrent", panel, $"{l10n.T("ui.current")}: {currentName}   ·   {l10n.T("ui.aether")} {state.resources.aether}", 13, UiFactory.TextMuted,
+                TextAnchor.MiddleLeft, new Vector2(20f, 14f), new Vector2(420f, 24f));
+            if (node == null)
+            {
+                ui.Text("PreviewEmpty", panel, l10n.T("ui.route_preview_empty"), 22, UiFactory.TextMuted, TextAnchor.MiddleCenter,
+                    new Vector2(20f, 330f), new Vector2(420f, 50f), FontStyle.Bold);
+                ui.Text("PreviewHint", panel, l10n.T("ui.route_select_hint"), 15, UiFactory.TextMuted, TextAnchor.UpperCenter,
+                    new Vector2(30f, 250f), new Vector2(400f, 70f));
+                return;
+            }
+
+            var available = controller.Simulation.CanTravelTo(node);
+            var isCurrent = node.id == state.currentNodeId;
+            var fill = NodeFill(node, isCurrent, available);
+            ui.Circle("PreviewRing", panel, new Vector2(20f, MapHeight - 92f), new Vector2(72f, 72f), available ? UiFactory.Brass : new Color(0.2f, 0.26f, 0.32f, 0.9f)).raycastTarget = false;
+            ui.Circle("PreviewFill", panel, new Vector2(24f, MapHeight - 88f), new Vector2(64f, 64f), fill).raycastTarget = false;
+            ui.Text("PreviewGlyph", panel, RouteRules.Glyph(node.encounterType), 28, isCurrent ? UiFactory.Ink : RouteRules.IsHostile(node.encounterType) ? UiFactory.Danger : UiFactory.TextPrimary,
+                TextAnchor.MiddleCenter, new Vector2(24f, MapHeight - 88f), new Vector2(64f, 64f), FontStyle.Bold);
+            ui.Text("PreviewName", panel, l10n.T(node.nameKey), 24, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(108f, MapHeight - 70f), new Vector2(340f, 40f), FontStyle.Bold);
+            var status = isCurrent ? l10n.T("ui.current") : node.visited ? l10n.T("ui.visited") : available ? L("이동 가능", "Reachable")
+                : state.resources.aether < node.aetherCost && current != null && current.connectedIds.Contains(node.id) ? l10n.T("ui.unaffordable")
+                : L("현재 위치에서 연결되지 않음", "Not connected from here");
+            ui.Text("PreviewStatus", panel, status, 14, available ? UiFactory.Success : UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                new Vector2(108f, MapHeight - 98f), new Vector2(340f, 26f), FontStyle.Bold);
+
+            var weather = ContentCatalog.GetWeather(node.weather);
+            var accuracy = weather.accuracyModifier >= 0f ? $"+{weather.accuracyModifier * 100f:0}%" : $"{weather.accuracyModifier * 100f:0}%";
+            var lines = new[]
+            {
+                (l10n.T("ui.aether"), $"{node.aetherCost} / {state.resources.aether}", state.resources.aether < node.aetherCost ? UiFactory.Danger : UiFactory.TextPrimary),
+                (l10n.T("ui.weather"), $"{l10n.T(weather.nameKey)}  ·  {l10n.T("ui.accuracy_mod", accuracy)}  ·  {l10n.T("ui.ward_mod", weather.wardRegenModifier.ToString("0.0"))}", UiFactory.TextPrimary),
+                (l10n.T("ui.altitude"), l10n.T("ui.recommended") + " " + l10n.EnumName(node.recommendedAltitude)
+                    + (node.recommendedAltitude != state.playerShip.altitude ? $"   ({l10n.T("ui.current")}: {l10n.EnumName(state.playerShip.altitude)})" : string.Empty),
+                    node.recommendedAltitude != state.playerShip.altitude ? UiFactory.Brass : UiFactory.TextPrimary)
+            };
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var y = MapHeight - 150f - i * 58f;
+                ui.Text("PreviewLabel_" + i, panel, lines[i].Item1, 12, UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(24f, y + 22f), new Vector2(400f, 20f), FontStyle.Bold);
+                ui.Text("PreviewValue_" + i, panel, lines[i].Item2, 15, lines[i].Item3, TextAnchor.MiddleLeft, new Vector2(24f, y - 4f), new Vector2(416f, 26f));
+            }
+
+            var threatKey = node.encounterType == EncounterType.Gate ? "ui.threat_gate" : node.encounterType == EncounterType.EliteBattle ? "ui.threat_elite"
+                : node.encounterType == EncounterType.Battle ? "ui.threat_battle" : "ui.threat_safe";
+            var threatBox = ui.PanelRect("PreviewThreat", panel, new Vector2(20f, 116f), new Vector2(420f, 120f),
+                RouteRules.IsHostile(node.encounterType) ? new Color(0.32f, 0.08f, 0.1f, 0.85f) : new Color(0.06f, 0.16f, 0.18f, 0.85f));
+            threatBox.GetComponent<Image>().raycastTarget = false;
+            ui.Text("PreviewThreatText", threatBox, l10n.T(threatKey), 15, RouteRules.IsHostile(node.encounterType) ? UiFactory.Danger : UiFactory.Aether,
+                TextAnchor.MiddleLeft, new Vector2(18f, 10f), new Vector2(384f, 100f), FontStyle.Bold);
+
+            var depart = ui.Button("Depart", panel, "[Enter] " + l10n.T("ui.depart"), ConfirmRouteSelection,
+                new Vector2(20f, 48f), new Vector2(420f, 58f), available ? UiFactory.Brass : UiFactory.PanelSoft, available ? UiFactory.Ink : UiFactory.TextMuted, 19);
+            depart.interactable = available;
         }
 
         private void ShowEncounter()
