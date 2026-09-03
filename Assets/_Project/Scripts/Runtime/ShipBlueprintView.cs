@@ -57,10 +57,10 @@ namespace AetherArk.Runtime
             options = options ?? new BlueprintOptions();
             var container = ui.Rect("Blueprint_" + ship.id, parent, position, size);
 
-            const float bowMargin = 46f;
-            const float sternMargin = 26f;
+            const float bowMargin = 40f;
+            const float sternMargin = 20f;
             const float gap = 6f;
-            var cell = Mathf.Floor(Mathf.Min((size.x - bowMargin - sternMargin - 24f) / plan.columns, (size.y - 40f) / plan.rows));
+            var cell = Mathf.Floor(Mathf.Min((size.x - bowMargin - sternMargin - 12f) / plan.columns, (size.y - 36f) / plan.rows));
             var gridWidth = cell * plan.columns;
             var gridHeight = cell * plan.rows;
             var gridX = Mathf.Floor((size.x - gridWidth - bowMargin + sternMargin) / 2f);
@@ -121,16 +121,22 @@ namespace AetherArk.Runtime
             if (options.highContrast) fill = new Color(fill.r * 1.25f, fill.g * 1.25f, fill.b * 1.25f, 1f);
 
             var localSystem = system.type;
-            var label = BuildLabel(l10n, system, options.showAllocatedPower);
-            var button = ui.Button(options.roomNamePrefix + system.type, container, label,
+            var button = ui.Button(options.roomNamePrefix + system.type, container, l10n.T(system.displayKey),
                 options.onRoomClick == null ? (Action)null : () => options.onRoomClick(localSystem),
-                position, size, fill, UiFactory.TextPrimary, size.y >= 100f ? 15 : 13);
+                position, size, fill, UiFactory.TextPrimary, size.y >= 100f ? 15 : 14);
             var labelText = button.GetComponentInChildren<Text>();
             if (labelText != null)
             {
                 labelText.alignment = TextAnchor.UpperCenter;
-                labelText.rectTransform.anchoredPosition = new Vector2(0f, -6f);
+                labelText.rectTransform.anchoredPosition = new Vector2(0f, -7f);
                 labelText.resizeTextForBestFit = false;
+            }
+            var pips = PowerPips(system, options.showAllocatedPower);
+            if (pips.Length > 0)
+            {
+                var lit = options.showAllocatedPower ? system.power : system.EffectivePower;
+                ui.Text("Pips_" + system.type, container, pips, 11, lit > 0 ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.UpperCenter,
+                    new Vector2(position.x, position.y + size.y - 44f), new Vector2(size.x, 16f), FontStyle.Bold);
             }
 
             // Oxygen and hazards.
@@ -141,14 +147,16 @@ namespace AetherArk.Runtime
                 if (room.fire > 1f)
                 {
                     Overlay(ui, container, "Fire_" + system.type, position, size, new Color(Fire.r, Fire.g, Fire.b, Mathf.Clamp(0.15f + room.fire / 100f * 0.5f, 0.15f, 0.6f)));
-                    ui.Text("FireLabel_" + system.type, container, $"▲ {room.fire:0}", 12, Fire, TextAnchor.UpperRight,
-                        new Vector2(position.x, position.y + size.y - 20f), new Vector2(size.x - 6f, 18f), FontStyle.Bold);
+                    ui.Text("FireLabel_" + system.type, container, $"▲ {room.fire:0}", 12, Fire, TextAnchor.LowerRight,
+                        new Vector2(position.x, position.y + 12f), new Vector2(size.x - 6f, 18f), FontStyle.Bold);
                 }
                 if (room.breach > 1f)
                 {
                     ui.Outline("Breach_" + system.type, container, position, size, options.highContrast ? 4f : 3f, Breach);
-                    ui.Text("BreachLabel_" + system.type, container, $"◇ {room.breach:0}", 12, Breach, TextAnchor.UpperLeft,
-                        new Vector2(position.x + 6f, position.y + size.y - 20f), new Vector2(size.x - 6f, 18f), FontStyle.Bold);
+                    // Stack under the fire label when both hazards are present.
+                    var breachY = room.fire > 1f ? position.y + 28f : position.y + 12f;
+                    ui.Text("BreachLabel_" + system.type, container, $"◇ {room.breach:0}", 12, Breach, TextAnchor.LowerRight,
+                        new Vector2(position.x, breachY), new Vector2(size.x - 6f, 18f), FontStyle.Bold);
                 }
             }
 
@@ -161,15 +169,12 @@ namespace AetherArk.Runtime
             if (options.crew != null) DrawCrewTokens(ui, container, system.type, position, size, options);
         }
 
-        private static string BuildLabel(LocalizationService l10n, ShipSystemState system, bool showAllocated)
+        public static string PowerPips(ShipSystemState system, bool showAllocated)
         {
-            var builder = new StringBuilder(l10n.T(system.displayKey));
-            if (system.maxPower > 0)
-            {
-                var lit = showAllocated ? system.power : system.EffectivePower;
-                builder.Append('\n');
-                for (var i = 0; i < system.maxPower; i++) builder.Append(i < lit ? '●' : '○');
-            }
+            if (system == null || system.maxPower <= 0) return string.Empty;
+            var lit = showAllocated ? system.power : system.EffectivePower;
+            var builder = new StringBuilder();
+            for (var i = 0; i < system.maxPower; i++) builder.Append(i < lit ? '●' : '○');
             return builder.ToString();
         }
 

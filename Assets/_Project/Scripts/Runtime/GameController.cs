@@ -35,7 +35,7 @@ namespace AetherArk.Runtime
         }
 
         /// <summary>
-        /// Development-build shortcut: `-debug-combat [cutter|carrier|cruiser]` opens a paused battle (add `-debug-unpaused` to start it running)
+        /// Development-build shortcut: `-debug-combat [cutter|carrier|cruiser]` opens a paused battle (add `-debug-unpaused` to start it running, `-debug-damage` to pre-apply a hazard showcase)
         /// against the requested enemy on a post-tutorial profile so the combat screen can be inspected
         /// without keyboard automation. Ignored in release builds.
         /// </summary>
@@ -54,6 +54,7 @@ namespace AetherArk.Runtime
                 Simulation.BeginCombat(tier, false);
                 if (Simulation.State.enemyShip.id == "enemy_" + wanted) break;
             }
+            if (Array.IndexOf(args, "-debug-damage") >= 0) DebugScenarios.ApplyDamageShowcase(Simulation.State);
             if (Array.IndexOf(args, "-debug-unpaused") >= 0) Simulation.SetPaused(false);
             Screen = FrontendScreen.Game;
             previousPhase = Simulation.State.phase;

@@ -476,6 +476,30 @@ namespace AetherArk.Tests
             Assert.That(BlueprintRules.CrewInitial(name), Is.EqualTo(expected));
         }
 
+        [Test]
+        public void DebugScenarios_DamageShowcaseExercisesEveryHazardOverlay()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 5);
+            simulation.BeginCombat(1, false);
+
+            DebugScenarios.ApplyDamageShowcase(simulation.State);
+            var ship = simulation.State.playerShip;
+
+            Assert.That(BlueprintRules.Classify(ship.GetSystem(ShipSystemType.Weapons)), Is.EqualTo(RoomCondition.Damaged));
+            Assert.That(ship.GetRoom(ShipSystemType.Weapons).fire, Is.GreaterThan(10f));
+            Assert.That(ship.GetRoom(ShipSystemType.Engines).breach, Is.GreaterThan(10f));
+            Assert.That(ship.GetRoom(ShipSystemType.LifeSupport).oxygen, Is.LessThan(30f));
+            Assert.That(BlueprintRules.Classify(ship.GetSystem(ShipSystemType.Sensors)), Is.EqualTo(RoomCondition.Disabled));
+            Assert.That(BlueprintRules.Classify(ship.GetSystem(ShipSystemType.Infirmary)), Is.EqualTo(RoomCondition.Unpowered));
+            Assert.That(ship.ward, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(ship.armor, Is.LessThan(ship.maxArmor));
+            Assert.That(simulation.State.crew.Exists(crew => crew.IsDowned), Is.True, "one crew member should be downed so the token state is visible");
+            Assert.That(BlueprintRules.Classify(simulation.State.enemyShip.GetSystem(ShipSystemType.Ward)), Is.EqualTo(RoomCondition.Damaged));
+            Assert.That(simulation.State.enemyShip.GetRoom(ShipSystemType.FlightDeck).fire, Is.GreaterThan(10f));
+        }
+
         [TestCase(WeatherType.Thunderhead, -0.08f)]
         [TestCase(WeatherType.Turbulence, -0.12f)]
         [TestCase(WeatherType.AetherCurrent, 0.04f)]

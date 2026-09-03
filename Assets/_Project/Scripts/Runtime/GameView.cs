@@ -316,9 +316,10 @@ namespace AetherArk.Runtime
             var hint = string.IsNullOrEmpty(selectedCrewId) ? L("방을 클릭하면 전력 조절 대상이 됩니다", "Click a room to select it for power control")
                 : L("이동할 방을 클릭하십시오", "Click the room to move the selected crew");
             ui.Text("BlueprintHint", panel, hint, 12, string.IsNullOrEmpty(selectedCrewId) ? UiFactory.TextMuted : UiFactory.Aether, TextAnchor.MiddleLeft,
-                new Vector2(18f, 10f), new Vector2(664f, 20f));
+                new Vector2(18f, 8f), new Vector2(664f, 20f));
+            AddRoomDetail(panel, "PlayerRoomDetail", ship, ship.GetSystem(selectedPlayerSystem), state.crew, true, new Vector2(16f, 30f), new Vector2(668f, 64f));
 
-            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 32f), new Vector2(668f, 516f), new BlueprintOptions
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 98f), new Vector2(668f, 450f), new BlueprintOptions
             {
                 roomNamePrefix = "Room_",
                 selectedSystem = selectedPlayerSystem,
@@ -423,9 +424,10 @@ namespace AetherArk.Runtime
             AddDefenseBar(panel, "EnemyHull", l10n.T("ui.hull"), ship.hull, ship.maxHull, 472f, 580f, UiFactory.Danger);
             var target = ship.GetSystem(selectedEnemySystem);
             ui.Text("EnemyTargetHint", panel, l10n.T("ui.mission_target", target != null ? l10n.T(target.displayKey) : string.Empty), 12, UiFactory.Brass, TextAnchor.MiddleLeft,
-                new Vector2(18f, 10f), new Vector2(608f, 20f), FontStyle.Bold);
+                new Vector2(18f, 8f), new Vector2(608f, 20f), FontStyle.Bold);
+            AddRoomDetail(panel, "EnemyRoomDetail", ship, target, null, false, new Vector2(16f, 30f), new Vector2(612f, 64f));
 
-            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 32f), new Vector2(612f, 512f), new BlueprintOptions
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 98f), new Vector2(612f, 446f), new BlueprintOptions
             {
                 roomNamePrefix = "EnemySystem_",
                 selectedSystem = selectedEnemySystem,
@@ -437,49 +439,142 @@ namespace AetherArk.Runtime
             });
         }
 
+        private static string MissionGlyph(SquadronMission mission)
+        {
+            switch (mission)
+            {
+                case SquadronMission.Intercept: return "▲";
+                case SquadronMission.Bombard: return "▼";
+                case SquadronMission.Escort: return "◆";
+                case SquadronMission.Recon: return "◇";
+                case SquadronMission.Assault: return "■";
+                default: return "●";
+            }
+        }
+
         private void BuildSquadronPanel()
         {
             var state = controller.Simulation.State;
             var panel = ui.PanelRect("SquadronPanel", ui.Root, new Vector2(20f, 20f), new Vector2(1880f, 232f), PanelColor);
-            ui.Text("SquadronTitle", panel, l10n.T("ui.squadrons"), 20, UiFactory.Brass, TextAnchor.MiddleLeft,
-                new Vector2(18f, 184f), new Vector2(300f, 36f), FontStyle.Bold);
-            ui.Text("InterceptCount", panel, $"{l10n.T("ui.intercept")}: {state.interceptCharges}", 17, UiFactory.Aether, TextAnchor.MiddleRight,
-                new Vector2(1540f, 184f), new Vector2(310f, 36f));
+            ui.Text("SquadronTitle", panel, l10n.T("ui.squadrons"), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(18f, 190f), new Vector2(300f, 32f), FontStyle.Bold);
+            ui.Text("InterceptCount", panel, $"▲ {l10n.T("ui.intercept")} {state.interceptCharges}   ·   {l10n.T("ui.ordnance")} {state.resources.ordnance}", 15, UiFactory.Aether, TextAnchor.MiddleRight,
+                new Vector2(1400f, 190f), new Vector2(460f, 32f), FontStyle.Bold);
             var tutorialHint = CombatTutorialHint(state);
             if (!string.IsNullOrEmpty(tutorialHint))
             {
-                ui.Text("TutorialHint", panel, tutorialHint, 16, UiFactory.Aether, TextAnchor.MiddleCenter,
-                    new Vector2(360f, 184f), new Vector2(1120f, 36f), FontStyle.Bold);
+                ui.Text("TutorialHint", panel, tutorialHint, 15, UiFactory.Aether, TextAnchor.MiddleCenter,
+                    new Vector2(340f, 190f), new Vector2(1040f, 32f), FontStyle.Bold);
             }
 
-            for (var i = 0; i < state.squadrons.Count; i++)
+            var deck = state.playerShip.GetSystem(ShipSystemType.FlightDeck);
+            var deckReady = deck != null && deck.EffectivePower > 0;
+            var missions = new[] { SquadronMission.Intercept, SquadronMission.Bombard, SquadronMission.Escort, SquadronMission.Recon, SquadronMission.Assault };
+            var keys = new[] { "ui.intercept", "ui.bombard", "ui.escort", "ui.recon", "ui.assault" };
+            for (var i = 0; i < state.squadrons.Count && i < 2; i++)
             {
                 var squadron = state.squadrons[i];
-                var y = 100f - i * 82f;
-                var status = l10n.EnumName(squadron.status);
-                var missionName = squadron.mission == SquadronMission.None ? string.Empty : " · " + l10n.EnumName(squadron.mission);
-                var targetName = squadron.mission == SquadronMission.Bombard || squadron.mission == SquadronMission.Assault
-                    ? " · " + l10n.T("ui.mission_target", l10n.T(state.enemyShip.GetSystem(squadron.targetSystem).displayKey)) : string.Empty;
-                var label = $"{l10n.T(squadron.displayKey)}\n{status}{missionName}{targetName} · {squadron.strength}/{squadron.maxStrength}";
-                ui.Text("SquadLabel_" + squadron.id, panel, label, 16, squadron.status == SquadronStatus.Destroyed ? UiFactory.Danger : UiFactory.TextPrimary,
-                    TextAnchor.MiddleLeft, new Vector2(18f, y), new Vector2(320f, 70f), FontStyle.Bold);
-                var missions = new[] { SquadronMission.Intercept, SquadronMission.Bombard, SquadronMission.Escort, SquadronMission.Recon, SquadronMission.Assault };
-                var keys = new[] { "ui.intercept", "ui.bombard", "ui.escort", "ui.recon", "ui.assault" };
+                var y = 104f - i * 86f;
+                var destroyed = squadron.status == SquadronStatus.Destroyed;
+                var busy = squadron.status == SquadronStatus.Launching || squadron.status == SquadronStatus.OnMission || squadron.status == SquadronStatus.Recovering;
+
+                // Slot card: glyph, name, status line, strength pips, ordnance cost.
+                var cardColor = destroyed ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : busy ? new Color(0.09f, 0.2f, 0.28f, 0.95f) : UiFactory.PanelSoft;
+                var card = ui.PanelRect("SquadCard_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), cardColor);
+                card.GetComponent<Image>().raycastTarget = false;
+                ui.Outline("SquadCardEdge_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), 1f,
+                    destroyed ? UiFactory.Danger : busy ? UiFactory.Aether : new Color(0.3f, 0.36f, 0.42f, 0.9f));
+                var typeGlyph = squadron.type == SquadronType.Interceptor ? "▲" : squadron.type == SquadronType.Bomber ? "▼" : "◆";
+                ui.Text("SquadGlyph_" + squadron.id, card, typeGlyph, 30, destroyed ? UiFactory.Danger : UiFactory.Brass, TextAnchor.MiddleCenter,
+                    new Vector2(6f, 10f), new Vector2(48f, 56f), FontStyle.Bold);
+                ui.Text("SquadName_" + squadron.id, card, l10n.T(squadron.displayKey), 15, destroyed ? UiFactory.Danger : UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                    new Vector2(58f, 44f), new Vector2(200f, 26f), FontStyle.Bold);
+                var strengthPips = new StringBuilder();
+                for (var p = 0; p < squadron.maxStrength; p++) strengthPips.Append(p < squadron.strength ? '●' : '○');
+                ui.Text("SquadStrength_" + squadron.id, card, strengthPips.ToString(), 13, squadron.strength <= 1 ? UiFactory.Danger : UiFactory.Aether, TextAnchor.MiddleRight,
+                    new Vector2(250f, 44f), new Vector2(84f, 26f), FontStyle.Bold);
+                var statusLine = l10n.EnumName(squadron.status);
+                if (squadron.mission != SquadronMission.None && busy) statusLine += " · " + MissionGlyph(squadron.mission) + " " + l10n.EnumName(squadron.mission);
+                if ((squadron.mission == SquadronMission.Bombard || squadron.mission == SquadronMission.Assault) && busy)
+                    statusLine += " → " + l10n.T(state.enemyShip.GetSystem(squadron.targetSystem).displayKey);
+                ui.Text("SquadStatus_" + squadron.id, card, statusLine, 12, busy ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                    new Vector2(58f, 20f), new Vector2(276f, 22f));
+                ui.Text("SquadCost_" + squadron.id, card, $"{l10n.T("ui.ordnance")} {squadron.ordnanceCost}", 11,
+                    state.resources.ordnance >= squadron.ordnanceCost ? UiFactory.TextMuted : UiFactory.Danger, TextAnchor.MiddleLeft,
+                    new Vector2(58f, 4f), new Vector2(200f, 18f));
+
+                // Mission gauge across the card bottom.
+                var progress = squadron.status == SquadronStatus.Ready ? 1f : destroyed ? 0f :
+                    squadron.phaseDuration <= 0f ? 0f : 1f - squadron.missionTimer / squadron.phaseDuration;
+                var progressColor = squadron.status == SquadronStatus.Recovering ? UiFactory.Success : destroyed ? UiFactory.Danger : UiFactory.Aether;
+                ui.Bar("SquadProgress_" + squadron.id, panel, progress, new Vector2(18f, y - 4f), new Vector2(340f, 4f), progressColor);
+
+                // Mission slots.
                 for (var m = 0; m < missions.Length; m++)
                 {
                     var mission = missions[m];
                     var localSquad = squadron.id;
                     var shortcut = mission == SquadronMission.Bombard && i < 2 ? $"[{i + 1}] " : string.Empty;
-                    var button = ui.Button($"{squadron.id}_{mission}", panel, shortcut + l10n.T(keys[m]), () => controller.LaunchSquadron(localSquad, mission, selectedEnemySystem),
-                        new Vector2(350f + m * 244f, y + 8f), new Vector2(224f, 54f), m == 1 ? new Color(0.43f, 0.18f, 0.11f, 0.98f) : UiFactory.PanelSoft,
-                        UiFactory.TextPrimary, 15);
-                    var deck = state.playerShip.GetSystem(ShipSystemType.FlightDeck);
-                    button.interactable = squadron.CanLaunch && state.resources.ordnance >= squadron.ordnanceCost && deck != null && deck.EffectivePower > 0;
+                    var label = $"{MissionGlyph(mission)}  {shortcut}{l10n.T(keys[m])}";
+                    var color = mission == SquadronMission.Bombard ? new Color(0.43f, 0.18f, 0.11f, 0.98f)
+                        : mission == SquadronMission.Assault ? new Color(0.36f, 0.14f, 0.3f, 0.98f)
+                        : mission == SquadronMission.Intercept || mission == SquadronMission.Escort ? new Color(0.09f, 0.24f, 0.3f, 0.98f)
+                        : UiFactory.PanelSoft;
+                    var button = ui.Button($"{squadron.id}_{mission}", panel, label, () => controller.LaunchSquadron(localSquad, mission, selectedEnemySystem),
+                        new Vector2(376f + m * 298f, y + 8f), new Vector2(284f, 60f), color, UiFactory.TextPrimary, 16);
+                    button.interactable = squadron.CanLaunch && state.resources.ordnance >= squadron.ordnanceCost && deckReady;
                 }
-                var progress = squadron.status == SquadronStatus.Ready ? 1f : squadron.status == SquadronStatus.Destroyed ? 0f :
-                    squadron.phaseDuration <= 0f ? 0f : 1f - squadron.missionTimer / squadron.phaseDuration;
-                var progressColor = squadron.status == SquadronStatus.Recovering ? UiFactory.Success : squadron.status == SquadronStatus.Destroyed ? UiFactory.Danger : UiFactory.Aether;
-                ui.Bar("SquadProgress_" + squadron.id, panel, progress, new Vector2(350f, y + 1f), new Vector2(1200f, 5f), progressColor);
+            }
+            if (!deckReady)
+                ui.Text("DeckWarning", panel, L("비행갑판 전력 없음 — 발진 불가", "Flight deck unpowered — launches blocked"), 13, UiFactory.Danger, TextAnchor.MiddleLeft,
+                    new Vector2(376f, 190f), new Vector2(600f, 32f), FontStyle.Bold);
+        }
+
+        private void AddRoomDetail(Transform parent, string id, ShipState ship, ShipSystemState system, List<CrewState> crew, bool allocatedPower,
+            Vector2 position, Vector2 size)
+        {
+            var strip = ui.PanelRect(id, parent, position, size, UiFactory.PanelSoft);
+            strip.GetComponent<Image>().raycastTarget = false;
+            if (system == null) return;
+            var room = ship.GetRoom(system.type);
+            var condition = BlueprintRules.Classify(system);
+            var conditionText = condition == RoomCondition.Disabled ? l10n.T("ui.disabled")
+                : condition == RoomCondition.Unpowered ? l10n.T("ui.unpowered")
+                : condition == RoomCondition.Damaged ? L("손상", "DAMAGED") : L("정상", "NOMINAL");
+            var conditionColor = condition == RoomCondition.Operational ? UiFactory.Success : condition == RoomCondition.Unpowered ? UiFactory.TextMuted : UiFactory.Danger;
+            var powerText = system.maxPower > 0
+                ? $"{l10n.T("ui.power")} {(allocatedPower ? system.power : system.EffectivePower)}/{system.maxPower}"
+                : l10n.T("system.core");
+            ui.Text(id + "Name", strip, l10n.T(system.displayKey), 15, UiFactory.Aether, TextAnchor.MiddleLeft,
+                new Vector2(12f, size.y - 30f), new Vector2(200f, 26f), FontStyle.Bold);
+            ui.Text(id + "Condition", strip, conditionText, 13, conditionColor, TextAnchor.MiddleLeft,
+                new Vector2(160f, size.y - 30f), new Vector2(140f, 26f), FontStyle.Bold);
+            ui.Text(id + "Stats", strip, $"{l10n.T("ui.integrity")} {system.Integrity * 100f:0}%   ·   {powerText}", 13, UiFactory.TextPrimary, TextAnchor.MiddleRight,
+                new Vector2(size.x - 372f, size.y - 30f), new Vector2(360f, 26f));
+
+            var hazards = new StringBuilder();
+            if (room != null)
+            {
+                if (room.fire > 1f) hazards.Append("▲ ").Append(l10n.T("ui.fire_short")).Append(' ').Append(room.fire.ToString("0")).Append("   ");
+                if (room.breach > 1f) hazards.Append("◇ ").Append(l10n.T("ui.breach_short")).Append(' ').Append(room.breach.ToString("0")).Append("   ");
+                hazards.Append("O₂ ").Append(room.oxygen.ToString("0")).Append('%');
+            }
+            var hazardous = room != null && (room.fire > 10f || room.breach > 10f || room.oxygen < 30f);
+            ui.Text(id + "Hazards", strip, hazards.ToString(), 12, hazardous ? UiFactory.Danger : UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                new Vector2(12f, 6f), new Vector2(300f, 24f), hazardous ? FontStyle.Bold : FontStyle.Normal);
+
+            if (crew != null)
+            {
+                var names = new StringBuilder();
+                for (var i = 0; i < crew.Count; i++)
+                {
+                    if (crew[i].currentRoom != system.type || crew[i].isDead || crew[i].onSortie) continue;
+                    if (names.Length > 0) names.Append(", ");
+                    names.Append(crew[i].displayName);
+                    if (crew[i].IsDowned) names.Append(" (!)");
+                }
+                ui.Text(id + "Crew", strip, names.Length > 0 ? L("승무원", "Crew") + ": " + names : L("배치된 승무원 없음", "No crew posted"), 12,
+                    names.Length > 0 ? UiFactory.TextPrimary : UiFactory.TextMuted, TextAnchor.MiddleRight, new Vector2(size.x - 372f, 6f), new Vector2(360f, 24f));
             }
         }
 
