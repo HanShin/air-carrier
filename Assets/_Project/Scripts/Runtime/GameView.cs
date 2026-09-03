@@ -252,71 +252,84 @@ namespace AetherArk.Runtime
             ui.Text("Timer", battleStrip, TimeSpan.FromSeconds(state.combatElapsed).ToString(@"mm\:ss"), 20, UiFactory.TextMuted, TextAnchor.MiddleRight,
                 new Vector2(1640f, 4f), new Vector2(200f, 48f));
 
+            BuildCrewColumn();
             BuildPlayerShipPanel();
             BuildCommandPanel();
             BuildEnemyPanel();
             BuildSquadronPanel();
         }
 
-        private void BuildPlayerShipPanel()
+        private void BuildCrewColumn()
         {
             var state = controller.Simulation.State;
-            var ship = state.playerShip;
-            var panel = ui.PanelRect("PlayerShip", ui.Root, new Vector2(20f, 270f), new Vector2(900f, 640f), PanelColor);
-            ui.Text("PlayerTitle", panel, l10n.T("ui.systems"), 22, UiFactory.Brass, TextAnchor.MiddleLeft,
-                new Vector2(22f, 584f), new Vector2(300f, 44f), FontStyle.Bold);
-            AddDefenseBar(panel, "Ward", l10n.T("ui.ward"), ship.ward, ship.maxWard, 320f, 606f, UiFactory.Aether);
-            AddDefenseBar(panel, "Armor", l10n.T("ui.armor"), ship.armor, ship.maxArmor, 500f, 606f, UiFactory.Brass);
-            AddDefenseBar(panel, "Hull", l10n.T("ui.hull"), ship.hull, ship.maxHull, 680f, 606f, UiFactory.Success);
-            var powerFree = Math.Max(0, ship.coreOutput - ship.AllocatedPower());
-            ui.Text("PowerSummary", panel, $"{l10n.T("ui.available_power")} {powerFree}/{ship.coreOutput}  ·  {l10n.T("ui.instability")} {ship.instability:0}%", 14,
-                ship.instability >= 70f ? UiFactory.Danger : UiFactory.TextMuted, TextAnchor.MiddleRight, new Vector2(500f, 576f), new Vector2(370f, 28f));
-            ui.Bar("InstabilityBar", panel, ship.instability / 100f, new Vector2(680f, 574f), new Vector2(190f, 5f), ship.instability >= 70f ? UiFactory.Danger : UiFactory.Violet);
-
-            var forecast = $"{l10n.T("ui.incoming_fire")} {state.enemyWeaponCooldown:0.0}s   ·   {l10n.T("ui.incoming_airstrike")} {state.enemySquadronCooldown:0.0}s   ·   {l10n.T("ui.weather_hazard")} {state.weatherHazardTimer:0.0}s";
-            ui.Text("ThreatForecast", panel, forecast, 14, NextThreat(state) <= 3f ? UiFactory.Danger : UiFactory.TextMuted, TextAnchor.MiddleLeft,
-                new Vector2(22f, 552f), new Vector2(848f, 26f), NextThreat(state) <= 3f ? FontStyle.Bold : FontStyle.Normal);
-
-            for (var i = 0; i < ship.systems.Count; i++)
-            {
-                var system = ship.systems[i];
-                var room = ship.GetRoom(system.type);
-                var x = 22f + (i % 5) * 172f;
-                var y = 442f - (i / 5) * 112f;
-                var condition = !system.IsOperational ? l10n.T("ui.disabled") : system.power <= 0 && system.maxPower > 0 ? l10n.T("ui.unpowered") : $"PWR {system.power}/{system.maxPower}";
-                var hazards = room.fire > 1f || room.breach > 1f
-                    ? $"{l10n.T("ui.fire_short")} {room.fire:0} · {l10n.T("ui.breach_short")} {room.breach:0} · O₂ {room.oxygen:0}"
-                    : $"{l10n.T("ui.integrity")} {system.Integrity * 100f:0}% · O₂ {room.oxygen:0}";
-                var label = $"{l10n.T(system.displayKey)}\n{condition}\n{hazards}";
-                var selected = selectedPlayerSystem == system.type;
-                var hazardous = room.fire > 10f || room.breach > 10f || room.oxygen < 30f || !system.IsOperational;
-                var color = hazardous ? new Color(0.48f, 0.12f, 0.1f, 0.98f) : selected ? new Color(0.11f, 0.4f, 0.43f, 0.98f) : UiFactory.PanelSoft;
-                var localSystem = system.type;
-                ui.Button("Room_" + system.type, panel, label, () => SelectRoom(localSystem), new Vector2(x, y), new Vector2(160f, 98f), color,
-                    UiFactory.TextPrimary, 14);
-                ui.Bar("Integrity_" + system.type, panel, system.Integrity, new Vector2(x + 7f, y + 6f), new Vector2(146f, 6f),
-                    system.Integrity < 0.35f ? UiFactory.Danger : UiFactory.Success);
-                if (system.maxPower > 0)
-                    ui.Bar("Power_" + system.type, panel, system.maxPower == 0 ? 0f : (float)system.power / system.maxPower,
-                        new Vector2(x + 7f, y + 14f), new Vector2(146f, 4f), UiFactory.Aether);
-            }
-
+            var panel = ui.PanelRect("CrewColumn", ui.Root, new Vector2(20f, 270f), new Vector2(200f, 640f), PanelColor);
             ui.Text("CrewTitle", panel, l10n.T("ui.crew"), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
-                new Vector2(22f, 275f), new Vector2(500f, 40f), FontStyle.Bold);
-            for (var i = 0; i < state.crew.Count; i++)
+                new Vector2(14f, 596f), new Vector2(170f, 36f), FontStyle.Bold);
+            for (var i = 0; i < state.crew.Count && i < 6; i++)
             {
                 var crew = state.crew[i];
-                var x = 22f + (i % 3) * 286f;
-                var y = 158f - (i / 3) * 108f;
+                var y = 494f - i * 98f;
                 var health = crew.isDead ? L("사망", "DEAD") : crew.IsDowned ? L("구조 대기", "DOWNED") : crew.onSortie ? L("출격 중", "SORTIE") : $"HP {crew.health:0}/{crew.maxHealth:0}";
-                var label = $"{(crew.isCaptain ? "★ " : "")}{crew.displayName}\n{l10n.EnumName(crew.lineage)} · {crew.role}\n{health}";
+                var label = $"{(crew.isCaptain ? "★ " : "")}{crew.displayName}\n{crew.role}\n{health}";
                 var selected = selectedCrewId == crew.id;
                 var color = crew.isDead ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : selected ? UiFactory.Violet : UiFactory.PanelSoft;
                 var localCrew = crew;
                 var button = ui.Button("Crew_" + crew.id, panel, label, () => SelectCrew(localCrew.id),
-                    new Vector2(x, y), new Vector2(270f, 94f), color, UiFactory.TextPrimary, 14);
+                    new Vector2(8f, y), new Vector2(184f, 92f), color, UiFactory.TextPrimary, 13);
                 button.interactable = !crew.isDead && !crew.onSortie;
+                var labelText = button.GetComponentInChildren<Text>();
+                if (labelText != null)
+                {
+                    labelText.alignment = TextAnchor.MiddleLeft;
+                    labelText.rectTransform.anchoredPosition = new Vector2(40f, 4f);
+                    labelText.rectTransform.sizeDelta = new Vector2(140f, 84f);
+                    labelText.resizeTextForBestFit = false;
+                }
+                var tokenColor = crew.isDead ? new Color(0.3f, 0.3f, 0.3f, 1f) : ShipBlueprintView.LineageColor(crew.lineage);
+                ui.Circle("Portrait_" + crew.id, button.transform, new Vector2(8f, 34f), new Vector2(26f, 26f), tokenColor).raycastTarget = false;
+                ui.Text("PortraitInitial_" + crew.id, button.transform, BlueprintRules.CrewInitial(crew.displayName), 13, UiFactory.Ink, TextAnchor.MiddleCenter,
+                    new Vector2(8f, 34f), new Vector2(26f, 26f), FontStyle.Bold);
+                ui.Bar("CrewHealth_" + crew.id, button.transform, crew.maxHealth <= 0f ? 0f : crew.health / crew.maxHealth,
+                    new Vector2(8f, 6f), new Vector2(168f, 5f), crew.health < crew.maxHealth * 0.35f ? UiFactory.Danger : UiFactory.Success);
             }
+        }
+
+        private void BuildPlayerShipPanel()
+        {
+            var state = controller.Simulation.State;
+            var ship = state.playerShip;
+            var panel = ui.PanelRect("PlayerShip", ui.Root, new Vector2(232f, 270f), new Vector2(700f, 640f), PanelColor);
+            ui.Text("PlayerTitle", panel, ship.displayName, 20, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(18f, 596f), new Vector2(230f, 36f), FontStyle.Bold);
+            AddDefenseBar(panel, "Ward", l10n.T("ui.ward"), ship.ward, ship.maxWard, 262f, 614f, UiFactory.Aether);
+            AddDefenseBar(panel, "Armor", l10n.T("ui.armor"), ship.armor, ship.maxArmor, 408f, 614f, UiFactory.Brass);
+            AddDefenseBar(panel, "Hull", l10n.T("ui.hull"), ship.hull, ship.maxHull, 554f, 614f, UiFactory.Success);
+            var powerFree = Math.Max(0, ship.coreOutput - ship.AllocatedPower());
+            ui.Text("PowerSummary", panel, $"{l10n.T("ui.available_power")} {powerFree}/{ship.coreOutput}  ·  {l10n.T("ui.instability")} {ship.instability:0}%", 13,
+                ship.instability >= 70f ? UiFactory.Danger : UiFactory.TextMuted, TextAnchor.MiddleRight, new Vector2(262f, 576f), new Vector2(420f, 24f));
+            ui.Bar("InstabilityBar", panel, ship.instability / 100f, new Vector2(554f, 570f), new Vector2(128f, 5f), ship.instability >= 70f ? UiFactory.Danger : UiFactory.Violet);
+
+            var forecast = $"{l10n.T("ui.incoming_fire")} {state.enemyWeaponCooldown:0.0}s   ·   {l10n.T("ui.incoming_airstrike")} {state.enemySquadronCooldown:0.0}s   ·   {l10n.T("ui.weather_hazard")} {state.weatherHazardTimer:0.0}s";
+            ui.Text("ThreatForecast", panel, forecast, 13, NextThreat(state) <= 3f ? UiFactory.Danger : UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                new Vector2(18f, 552f), new Vector2(664f, 24f), NextThreat(state) <= 3f ? FontStyle.Bold : FontStyle.Normal);
+
+            var hint = string.IsNullOrEmpty(selectedCrewId) ? L("방을 클릭하면 전력 조절 대상이 됩니다", "Click a room to select it for power control")
+                : L("이동할 방을 클릭하십시오", "Click the room to move the selected crew");
+            ui.Text("BlueprintHint", panel, hint, 12, string.IsNullOrEmpty(selectedCrewId) ? UiFactory.TextMuted : UiFactory.Aether, TextAnchor.MiddleLeft,
+                new Vector2(18f, 10f), new Vector2(664f, 20f));
+
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 32f), new Vector2(668f, 516f), new BlueprintOptions
+            {
+                roomNamePrefix = "Room_",
+                selectedSystem = selectedPlayerSystem,
+                onRoomClick = SelectRoom,
+                crew = state.crew,
+                selectedCrewId = selectedCrewId,
+                onCrewClick = SelectCrew,
+                reducedMotion = controller.Profile.accessibility.reducedMotion,
+                highContrast = controller.Profile.accessibility.highContrast,
+                showAllocatedPower = true
+            });
         }
 
         private void SelectRoom(ShipSystemType room)
@@ -341,7 +354,7 @@ namespace AetherArk.Runtime
             var state = controller.Simulation.State;
             var ship = state.playerShip;
             var system = ship.GetSystem(selectedPlayerSystem) ?? ship.GetSystem(ShipSystemType.Weapons);
-            var panel = ui.PanelRect("CommandPanel", ui.Root, new Vector2(940f, 270f), new Vector2(300f, 640f), PanelColor);
+            var panel = ui.PanelRect("CommandPanel", ui.Root, new Vector2(944f, 270f), new Vector2(300f, 640f), PanelColor);
             var pauseKey = controller.Profile.accessibility.pauseKey;
             ui.Button("Pause", panel, $"[{pauseKey}] " + (state.isPaused ? l10n.T("ui.resume") : l10n.T("ui.pause_button")), controller.TogglePause,
                 new Vector2(18f, 568f), new Vector2(264f, 54f), state.isPaused ? UiFactory.Brass : UiFactory.Violet, state.isPaused ? UiFactory.Ink : UiFactory.TextPrimary, 17);
@@ -399,27 +412,29 @@ namespace AetherArk.Runtime
         {
             var state = controller.Simulation.State;
             var ship = state.enemyShip;
-            var panel = ui.PanelRect("EnemyShip", ui.Root, new Vector2(1260f, 270f), new Vector2(640f, 640f), PanelColor);
-            ui.Text("EnemyTitle", panel, l10n.T("ui.enemy"), 20, UiFactory.Danger, TextAnchor.MiddleLeft,
-                new Vector2(22f, 580f), new Vector2(596f, 46f), FontStyle.Bold);
-            var defense = $"{ship.displayName}\n{l10n.T("ui.hull")} {ship.hull:0}/{ship.maxHull:0}   {l10n.T("ui.armor")} {ship.armor:0}   {l10n.T("ui.ward")} {ship.ward:0}";
-            ui.Text("EnemyDefense", panel, defense, 18, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
-                new Vector2(22f, 520f), new Vector2(596f, 60f), FontStyle.Bold);
+            var panel = ui.PanelRect("EnemyShip", ui.Root, new Vector2(1256f, 270f), new Vector2(644f, 640f), PanelColor);
+            ui.Text("EnemyTitle", panel, l10n.T("ui.enemy"), 18, UiFactory.Danger, TextAnchor.MiddleLeft,
+                new Vector2(18f, 596f), new Vector2(608f, 36f), FontStyle.Bold);
+            var shipName = string.IsNullOrEmpty(ship.nameKey) ? ship.displayName : l10n.T(ship.nameKey);
+            ui.Text("EnemyName", panel, shipName, 20, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                new Vector2(18f, 560f), new Vector2(300f, 36f), FontStyle.Bold);
+            AddDefenseBar(panel, "EnemyWard", l10n.T("ui.ward"), ship.ward, ship.maxWard, 318f, 580f, UiFactory.Aether);
+            AddDefenseBar(panel, "EnemyArmor", l10n.T("ui.armor"), ship.armor, ship.maxArmor, 318f, 556f, UiFactory.Brass);
+            AddDefenseBar(panel, "EnemyHull", l10n.T("ui.hull"), ship.hull, ship.maxHull, 472f, 580f, UiFactory.Danger);
+            var target = ship.GetSystem(selectedEnemySystem);
+            ui.Text("EnemyTargetHint", panel, l10n.T("ui.mission_target", target != null ? l10n.T(target.displayKey) : string.Empty), 12, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(18f, 10f), new Vector2(608f, 20f), FontStyle.Bold);
 
-            for (var i = 0; i < ship.systems.Count; i++)
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 32f), new Vector2(612f, 512f), new BlueprintOptions
             {
-                var system = ship.systems[i];
-                var x = 22f + (i % 2) * 304f;
-                var y = 416f - (i / 2) * 92f;
-                var label = $"{l10n.T(system.displayKey)}\n{system.Integrity * 100f:0}% · PWR {system.EffectivePower}";
-                var selected = selectedEnemySystem == system.type;
-                var localSystem = system.type;
-                ui.Button("EnemySystem_" + system.type, panel, label, () => { selectedEnemySystem = localSystem; controller.Simulation.State.selectedEnemySystem = localSystem; ShowCombat(); },
-                    new Vector2(x, y), new Vector2(290f, 78f), selected ? new Color(0.52f, 0.14f, 0.16f, 0.98f) : UiFactory.PanelSoft,
-                    UiFactory.TextPrimary, 15);
-                ui.Bar("EnemyIntegrity_" + system.type, panel, system.Integrity, new Vector2(x + 8f, y + 6f), new Vector2(274f, 6f),
-                    system.Integrity < 0.35f ? UiFactory.Danger : UiFactory.Brass);
-            }
+                roomNamePrefix = "EnemySystem_",
+                selectedSystem = selectedEnemySystem,
+                onRoomClick = system => { selectedEnemySystem = system; controller.Simulation.State.selectedEnemySystem = system; ShowCombat(); },
+                crew = null,
+                reducedMotion = controller.Profile.accessibility.reducedMotion,
+                highContrast = controller.Profile.accessibility.highContrast,
+                showAllocatedPower = false
+            });
         }
 
         private void BuildSquadronPanel()

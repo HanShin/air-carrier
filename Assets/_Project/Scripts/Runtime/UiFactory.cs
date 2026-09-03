@@ -118,7 +118,9 @@ namespace AetherArk.Runtime
             colors.highlightedColor = new Color(1.12f, 1.12f, 1.12f, 1f);
             colors.pressedColor = new Color(0.78f, 0.78f, 0.78f, 1f);
             colors.disabledColor = new Color(0.35f, 0.35f, 0.35f, 0.65f);
-            colors.fadeDuration = 0.08f;
+            // The combat view is rebuilt every refresh tick; a non-zero fade makes every rebuilt
+            // disabled button flash from its normal colour to its disabled colour.
+            colors.fadeDuration = 0f;
             button.colors = colors;
             if (action != null) button.onClick.AddListener(() => action());
             var text = Text(name + "Label", rect, label, fontSize, foreground ?? TextPrimary, TextAnchor.MiddleCenter,
@@ -178,6 +180,64 @@ namespace AetherArk.Runtime
             rect.localEulerAngles = new Vector3(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
             Image(rect, color).raycastTarget = false;
             rect.SetAsFirstSibling();
+        }
+
+        private static Sprite circleSprite;
+
+        public static Sprite CircleSprite
+        {
+            get
+            {
+                if (circleSprite != null) return circleSprite;
+                const int size = 64;
+                var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+                var pixels = new Color[size * size];
+                var radius = size / 2f - 1f;
+                for (var y = 0; y < size; y++)
+                for (var x = 0; x < size; x++)
+                {
+                    var distance = Mathf.Sqrt((x + 0.5f - size / 2f) * (x + 0.5f - size / 2f) + (y + 0.5f - size / 2f) * (y + 0.5f - size / 2f));
+                    var alpha = Mathf.Clamp01(radius - distance + 0.5f);
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+                texture.SetPixels(pixels);
+                texture.Apply();
+                circleSprite = Sprite.Create(texture, new UnityEngine.Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 64f);
+                return circleSprite;
+            }
+        }
+
+        public Image Circle(string name, Transform parent, Vector2 position, Vector2 size, Color color)
+        {
+            var rect = Rect(name, parent, position, size);
+            var image = Image(rect, color);
+            image.sprite = CircleSprite;
+            return image;
+        }
+
+        public RectTransform Rotated(string name, Transform parent, Vector2 center, Vector2 size, float degrees, Color color)
+        {
+            var rect = Rect(name, parent, center, size);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.localEulerAngles = new Vector3(0f, 0f, degrees);
+            Image(rect, color).raycastTarget = false;
+            return rect;
+        }
+
+        public void Outline(string name, Transform parent, Vector2 position, Vector2 size, float thickness, Color color)
+        {
+            var edges = new[]
+            {
+                new UnityEngine.Rect(position.x, position.y + size.y - thickness, size.x, thickness),
+                new UnityEngine.Rect(position.x, position.y, size.x, thickness),
+                new UnityEngine.Rect(position.x, position.y, thickness, size.y),
+                new UnityEngine.Rect(position.x + size.x - thickness, position.y, thickness, size.y)
+            };
+            for (var i = 0; i < edges.Length; i++)
+            {
+                var rect = PanelRect(name + "_" + i, parent, new Vector2(edges[i].x, edges[i].y), new Vector2(edges[i].width, edges[i].height), color);
+                rect.GetComponent<Image>().raycastTarget = false;
+            }
         }
 
         private static Font CreateFont()

@@ -36,7 +36,7 @@ Profile and suspended run saves are separate, schema-versioned JSON files writte
 
 | Milestone | Flagships | Lineages | Regions | Events | Enemy silhouettes/configs |
 |---|---:|---:|---:|---:|---:|
-| Vertical slice | 1 | 6 represented | 1 short route | 5 authored sets | 2 / 2 |
+| Vertical slice | 1 | 6 represented | 1 short route | 5 authored sets | 3 / 3 |
 | Early Access | 1 | 4 fully authored | 4 | ~50 | 6 / ~15 |
 | 1.0 | 3 | 6 | 6 + finale | 100+ | 12 / ~30 |
 

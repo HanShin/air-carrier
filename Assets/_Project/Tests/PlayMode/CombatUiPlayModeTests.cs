@@ -26,6 +26,13 @@ namespace AetherArk.Tests
             Assert.That(EventSystem.current, Is.Not.Null, "Mouse input requires an active EventSystem.");
             Assert.That(Object.FindFirstObjectByType<GraphicRaycaster>(), Is.Not.Null, "Mouse input requires a canvas GraphicRaycaster.");
             Assert.That(controller.Simulation.State.isPaused, Is.False);
+            foreach (var member in controller.Simulation.State.crew)
+            {
+                if (member.isDead || member.onSortie) continue;
+                Assert.That(GameObject.Find("CrewToken_" + member.id), Is.Not.Null, "Blueprint did not render a crew token for " + member.id);
+            }
+            foreach (var system in controller.Simulation.State.enemyShip.systems)
+                Assert.That(GameObject.Find("EnemySystem_" + system.type), Is.Not.Null, "Enemy blueprint is missing room " + system.type);
             ActivateButton("Pause");
             yield return null;
             Assert.That(controller.Simulation.State.isPaused, Is.True, "Pause button command binding did not execute.");
@@ -62,6 +69,24 @@ namespace AetherArk.Tests
             ActivateButton("Room_" + destination);
             yield return null;
             Assert.That(crew.currentRoom, Is.EqualTo(destination), "Crew selection followed by a room click did not issue a move command.");
+
+            controller.AbandonRun();
+        }
+
+        [UnityTest]
+        public IEnumerator DisabledButtons_RenderTheirDisabledColourOnTheFrameTheyAreBuilt()
+        {
+            yield return null;
+            var controller = Object.FindFirstObjectByType<GameController>();
+            controller.StartRun();
+            controller.Simulation.BeginCombat(1, false);
+            controller.TogglePause(); // Rebuild the view; the combat view is rebuilt every refresh tick.
+
+            var overcharge = GameObject.Find("Overcharge").GetComponent<Button>();
+            Assert.That(overcharge.interactable, Is.False, "Overcharge should start disabled without a resonator in the selected room.");
+            var image = overcharge.targetGraphic;
+            Assert.That(image.canvasRenderer.GetColor(), Is.EqualTo(overcharge.colors.disabledColor),
+                "A freshly built disabled button must not start at its normal colour and fade; that fade is visible as flashing on every rebuild.");
 
             controller.AbandonRun();
         }

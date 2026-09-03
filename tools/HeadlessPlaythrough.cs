@@ -74,7 +74,8 @@ internal static class HeadlessPlaythrough
             captainName = "Audit Captain",
             captainLineage = CrewLineage.Human,
             difficulty = difficulty,
-            supportShip = SupportShipType.Workshop
+            supportShip = SupportShipType.Workshop,
+            tutorialSeen = seed != GameSimulation.FirstExpeditionSeed
         };
         var simulation = GameSimulation.NewRun(profile, seed);
         var result = new Result { Seed = seed };

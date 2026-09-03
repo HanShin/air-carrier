@@ -332,6 +332,150 @@ namespace AetherArk.Tests
             }
         }
 
+        private static GameSimulation RunWithStrikeCarrier()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            for (var seed = 1; seed < 400; seed++)
+            {
+                var simulation = GameSimulation.NewRun(profile, seed);
+                simulation.BeginCombat(1, false);
+                if (simulation.State.enemyShip.id == "enemy_carrier") return simulation;
+            }
+            Assert.Fail("No tier-1 battle produced the Imperial Strike Carrier.");
+            return null;
+        }
+
+        [Test]
+        public void FirstExpedition_NeverSpawnsStrikeCarrier()
+        {
+            var profile = Profile(Difficulty.Story);
+            profile.tutorialSeen = false;
+            var simulation = GameSimulation.NewRun(profile, GameSimulation.FirstExpeditionSeed);
+
+            for (var battle = 0; battle < 60; battle++)
+            {
+                simulation.BeginCombat(1, false);
+                Assert.That(simulation.State.enemyShip.id, Is.EqualTo("enemy_cutter"));
+            }
+        }
+
+        [Test]
+        public void StrikeCarrier_SpawnsWithDeckHeavyPowerBudget()
+        {
+            var enemy = RunWithStrikeCarrier().State.enemyShip;
+
+            Assert.That(enemy.nameKey, Is.EqualTo("ship.enemy_carrier"));
+            Assert.That(enemy.GetSystem(ShipSystemType.FlightDeck).power, Is.EqualTo(3));
+            Assert.That(enemy.GetSystem(ShipSystemType.Weapons).power, Is.EqualTo(1));
+            Assert.That(enemy.AllocatedPower(), Is.LessThanOrEqualTo(enemy.coreOutput));
+        }
+
+        [Test]
+        public void StrikeCarrier_AirStrikeHitsDeckUnlessInterceptorsAreReady()
+        {
+            var simulation = RunWithStrikeCarrier();
+            var state = simulation.State;
+            state.playerShip.ward = 0f;
+            state.playerShip.armor = 0f;
+            state.playerShip.GetSystem(ShipSystemType.Ward).power = 0;
+            state.enemyShip.GetSystem(ShipSystemType.Weapons).power = 0;
+            state.currentWeather = WeatherType.Clear;
+            state.weatherHazardTimer = 999f;
+            state.interceptCharges = 1;
+            simulation.SetPaused(false);
+
+            for (var i = 0; i < 106; i++) simulation.Tick(0.1f);
+            Assert.That(state.interceptCharges, Is.EqualTo(0));
+            Assert.That(state.playerShip.GetSystem(ShipSystemType.FlightDeck).damage, Is.EqualTo(0f).Within(0.001f));
+
+            for (var i = 0; i < 160; i++) simulation.Tick(0.1f);
+            Assert.That(state.playerShip.GetSystem(ShipSystemType.FlightDeck).damage, Is.GreaterThan(0f));
+        }
+
+        [TestCase("ship.enemy_cutter")]
+        [TestCase("ship.enemy_cruiser")]
+        [TestCase("ship.enemy_carrier")]
+        public void EnemyShipNames_AreLocalizedInBothLanguages(string key)
+        {
+            Assert.That(new LocalizationService(Language.Korean).T(key), Is.Not.EqualTo(key));
+            Assert.That(new LocalizationService(Language.English).T(key), Is.Not.EqualTo(key));
+            Assert.That(new LocalizationService(Language.Korean).T(key), Is.Not.EqualTo(new LocalizationService(Language.English).T(key)));
+        }
+
+        [TestCase("ship_vanguard")]
+        [TestCase("enemy_cutter")]
+        [TestCase("enemy_cruiser")]
+        [TestCase("enemy_carrier")]
+        public void DeckPlan_CoversEverySystemWithoutOverlapInsideGrid(string shipId)
+        {
+            var random = 7u;
+            var ship = shipId == "ship_vanguard" ? ContentCatalog.CreateVanguard()
+                : shipId == "enemy_cruiser" ? ContentCatalog.CreateEnemy(2, false, ref random)
+                : shipId == "enemy_cutter" ? ContentCatalog.CreateEnemy(1, false, ref random)
+                : FindCarrier();
+            Assert.That(ship.id, Is.EqualTo(shipId));
+            var plan = ContentCatalog.GetDeckPlan(ship.id);
+            Assert.That(plan, Is.Not.Null);
+
+            var occupied = new bool[plan.columns, plan.rows];
+            foreach (var system in ship.systems)
+            {
+                var tile = plan.GetTile(system.type);
+                Assert.That(tile, Is.Not.Null, system.type + " has no deck tile");
+                Assert.That(plan.tiles.FindAll(t => t.system == system.type).Count, Is.EqualTo(1));
+                for (var x = tile.column; x < tile.column + tile.width; x++)
+                for (var y = tile.row; y < tile.row + tile.height; y++)
+                {
+                    Assert.That(x, Is.InRange(0, plan.columns - 1), system.type + " leaves the grid");
+                    Assert.That(y, Is.InRange(0, plan.rows - 1), system.type + " leaves the grid");
+                    Assert.That(occupied[x, y], Is.False, system.type + " overlaps another room");
+                    occupied[x, y] = true;
+                }
+            }
+        }
+
+        private static ShipState FindCarrier()
+        {
+            for (var seed = 1u; seed < 500u; seed++)
+            {
+                var random = seed;
+                var ship = ContentCatalog.CreateEnemy(1, true, ref random);
+                if (ship.id == "enemy_carrier") return ship;
+            }
+            Assert.Fail("No carrier found");
+            return null;
+        }
+
+        [Test]
+        public void BlueprintRules_ClassifyRoomByPowerDamageAndDisabledState()
+        {
+            var system = new ShipSystemState { type = ShipSystemType.Weapons, power = 2, maxPower = 4, maxDamage = 100f };
+            Assert.That(BlueprintRules.Classify(system), Is.EqualTo(RoomCondition.Operational));
+
+            system.power = 0;
+            Assert.That(BlueprintRules.Classify(system), Is.EqualTo(RoomCondition.Unpowered));
+
+            system.power = 2;
+            system.damage = 40f;
+            Assert.That(BlueprintRules.Classify(system), Is.EqualTo(RoomCondition.Damaged));
+
+            system.damage = 100f;
+            Assert.That(BlueprintRules.Classify(system), Is.EqualTo(RoomCondition.Disabled));
+
+            var core = new ShipSystemState { type = ShipSystemType.AetherCore, power = 0, maxPower = 0, maxDamage = 100f };
+            Assert.That(BlueprintRules.Classify(core), Is.EqualTo(RoomCondition.Operational), "systems without a power budget are never 'unpowered'");
+        }
+
+        [TestCase("Liora", "L")]
+        [TestCase("아린", "아")]
+        [TestCase("", "?")]
+        [TestCase(null, "?")]
+        public void BlueprintRules_CrewInitialUsesFirstCharacter(string name, string expected)
+        {
+            Assert.That(BlueprintRules.CrewInitial(name), Is.EqualTo(expected));
+        }
+
         [TestCase(WeatherType.Thunderhead, -0.08f)]
         [TestCase(WeatherType.Turbulence, -0.12f)]
         [TestCase(WeatherType.AetherCurrent, 0.04f)]

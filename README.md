@@ -7,6 +7,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 ## What is implemented
 
 - Combat UX pass: mouse-ready command bindings, disabled-state feedback, room integrity/power/hazard bars, layered defense meters, and threat countdowns.
+- FTL-style combat screen: both ships are drawn as top-down deck plans (`ShipBlueprintView`) from per-ship `DeckPlan` data. Rooms are coloured by condition, show power pips and integrity, and carry fire/breach/oxygen overlays; crew appear as lineage-coloured tokens inside rooms and as a portrait column on the left. Clicking a room or token issues the same commands as before.
 - Air-wing feedback: launch/mission/return progress, target labels, recovery notices, and pilot sortie state.
 - Warning UX: localized severity banner, explicit auto-pause reason, in-combat auto-pause toggle, and warning context that remains visible until combat resumes.
 
@@ -16,6 +17,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - Power allocation, resonator overcharge and instability accidents.
 - Free pause, adjustable combat speed, warning auto-pause, UI scaling, high contrast, reduced motion, and a rebindable pause key.
 - Two persistent air wings with intercept, bombard, escort, recon, and assault missions.
+- Three enemy silhouettes: the pursuit cutter, the storm cruiser, and the deck-heavy Imperial Strike Carrier, which replaces the cutter in 40% of regular battles from the second expedition onward and punishes launches unless interceptors or boarders are used. Enemy ship names are localized.
 - Low/mid/high altitude, six weather profiles, support ships, convoy population/morale, field repairs, and squadron refits.
 - Deterministic route/combat/event random streams and versioned atomic profile/run saves.
 - Last-resort aether and ordnance recovery so a depleted resource cannot silently soft-lock an expedition.
@@ -39,6 +41,8 @@ Keyboard access for the current slice:
 
 Emergency ordnance first consumes salvage, then supplies, then lives. It adds instability and costs morale, but guarantees that an empty magazine cannot permanently trap a run in combat.
 
+Development builds accept `-debug-combat [cutter|carrier|cruiser]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running), which is how screenshots are verified without keyboard automation.
+
 Default pause is `Space`; it can be changed to `P` during expedition setup. Save files are written under `Application.persistentDataPath` as `profile.json` and `suspended_run.json`.
 
 ## Tests and validation
@@ -47,16 +51,16 @@ Default pause is `Space`; it can be changed to `P` during expedition setup. Save
 - Command-line Unity test: `Unity -batchmode -nographics -projectPath <repo> -runTests -testPlatform EditMode -testResults <results.xml>`.
 - macOS development build: execute `AetherArk.Editor.ProjectBuilder.BuildMac`; output is `Builds/AetherArk.app`.
 - Outside Unity: `python3 tools/validate_project.py` validates JSON, C# delimiter balance, localization coverage, and required assets.
-- With Mono installed: `bash tools/run_headless_audit.sh` compiles the real core C# sources and runs 100 seeded Standard/Story autoplayer campaigns plus the locked first expedition.
+- With Mono installed: `bash tools/run_headless_audit.sh` compiles the real core C# sources and runs 100 seeded Standard/Story autoplayer campaigns plus the locked first expedition. Only the locked seed is treated as a first expedition, so the sweeps exercise the strike carrier.
 - `bash tools/compile_all_csharp.sh` compiles the complete runtime/UI source against compile-only Unity API stubs, catching C# and project-layer linkage errors before an editor import.
 
-The 17 included EditMode tests cover deterministic generation, the full seven-jump route, power limits, layered damage, event costs, captain death, squadron launch, both emergency-resource fallbacks, difficulty modifiers, weather definitions, and save round-trips.
+The included EditMode tests cover deterministic generation, the full seven-jump route, power limits, layered damage, event costs, captain death, squadron launch, both emergency-resource fallbacks, difficulty modifiers, weather definitions, save round-trips, the strike carrier's power budget and air-strike behaviour, its exclusion from the locked first expedition, and enemy-name localization.
 
 ## Project map
 
 - `Assets/_Project/Scripts/Core`: serializable state contracts, commands, seeded RNG, and deterministic simulation.
 - `Assets/_Project/Scripts/Content`: vertical-slice content and Korean/English string tables.
-- `Assets/_Project/Scripts/Runtime`: bootstrap, generated UI, input, and persistence.
+- `Assets/_Project/Scripts/Runtime`: bootstrap, generated UI, blueprint renderer, input, and persistence.
 - `Assets/_Project/Tests/EditMode`: automated rule and save tests.
 - `docs/GDD.md`: locked design rules and production targets.
 

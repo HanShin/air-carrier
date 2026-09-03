@@ -31,6 +31,33 @@ namespace AetherArk.Runtime
             ui = new UiFactory(Profile.accessibility.uiScale);
             view = new GameView(this, ui);
             ShowMenu();
+            TryDebugCombatLaunch();
+        }
+
+        /// <summary>
+        /// Development-build shortcut: `-debug-combat [cutter|carrier|cruiser]` opens a paused battle (add `-debug-unpaused` to start it running)
+        /// against the requested enemy on a post-tutorial profile so the combat screen can be inspected
+        /// without keyboard automation. Ignored in release builds.
+        /// </summary>
+        private void TryDebugCombatLaunch()
+        {
+            if (!Debug.isDebugBuild) return;
+            var args = Environment.GetCommandLineArgs();
+            var index = Array.IndexOf(args, "-debug-combat");
+            if (index < 0) return;
+            var wanted = index + 1 < args.Length && !args[index + 1].StartsWith("-") ? args[index + 1].ToLowerInvariant() : "cutter";
+            var tier = wanted == "cruiser" ? 2 : 1;
+            Profile.tutorialSeen = true;
+            for (var seed = 1; seed < 4000; seed++)
+            {
+                Simulation = GameSimulation.NewRun(Profile, seed);
+                Simulation.BeginCombat(tier, false);
+                if (Simulation.State.enemyShip.id == "enemy_" + wanted) break;
+            }
+            if (Array.IndexOf(args, "-debug-unpaused") >= 0) Simulation.SetPaused(false);
+            Screen = FrontendScreen.Game;
+            previousPhase = Simulation.State.phase;
+            view.ShowGamePhase();
         }
 
         private void Update()
@@ -56,7 +83,8 @@ namespace AetherArk.Runtime
             }
 
             refreshTimer -= Time.unscaledDeltaTime;
-            if (Simulation.State.phase == GamePhase.Combat && refreshTimer <= 0f)
+            // Nothing on the combat screen changes while paused; commands trigger their own refresh.
+            if (Simulation.State.phase == GamePhase.Combat && !Simulation.State.isPaused && refreshTimer <= 0f)
             {
                 refreshTimer = Profile.accessibility.reducedMotion ? 0.45f : 0.2f;
                 view.ShowGamePhase();

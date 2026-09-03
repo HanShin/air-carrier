@@ -16,6 +16,7 @@ namespace UnityEngine
         public GameObject gameObject { get; set; }
         public Transform transform { get; set; }
         public T GetComponent<T>() where T : Component, new() => new T();
+        public T GetComponentInChildren<T>() where T : Component, new() => new T();
     }
 
     public class Behaviour : Component { }
@@ -79,7 +80,30 @@ namespace UnityEngine
     }
 
     public class Texture : Object { }
-    public class Texture2D : Texture { }
+    public enum TextureFormat { RGBA32 }
+    public enum FilterMode { Point, Bilinear }
+    public enum TextureWrapMode { Repeat, Clamp }
+
+    public class Texture2D : Texture
+    {
+        public Texture2D() { }
+        public Texture2D(int width, int height, TextureFormat format, bool mipChain) { }
+        public FilterMode filterMode { get; set; }
+        public TextureWrapMode wrapMode { get; set; }
+        public void SetPixels(Color[] pixels) { }
+        public void Apply() { }
+    }
+
+    public struct Rect
+    {
+        public float x, y, width, height;
+        public Rect(float x, float y, float width, float height) { this.x = x; this.y = y; this.width = width; this.height = height; }
+    }
+
+    public class Sprite : Object
+    {
+        public static Sprite Create(Texture2D texture, Rect rect, Vector2 pivot, float pixelsPerUnit) => new Sprite();
+    }
     public class Font : Object
     {
         public static Font CreateDynamicFontFromOSFont(string[] names, int size) => new Font();
@@ -100,6 +124,7 @@ namespace UnityEngine
     public static class Debug
     {
         public static void LogWarning(object message) { }
+        public static bool isDebugBuild => true;
     }
 
     public static class Time
@@ -118,6 +143,11 @@ namespace UnityEngine
         public static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value));
         public static int RoundToInt(float value) => (int)Math.Round(value);
         public static float Atan2(float y, float x) => (float)Math.Atan2(y, x);
+        public static float Sqrt(float value) => (float)Math.Sqrt(value);
+        public static float Clamp01(float value) => Clamp(value, 0f, 1f);
+        public static float Floor(float value) => (float)Math.Floor(value);
+        public static float Min(float a, float b) => Math.Min(a, b);
+        public static float Max(float a, float b) => Math.Max(a, b);
     }
 
     public static class JsonUtility
@@ -152,7 +182,7 @@ namespace UnityEngine
     }
     public enum RenderMode { ScreenSpaceOverlay }
     public enum FontStyle { Normal, Bold }
-    public enum TextAnchor { MiddleCenter, MiddleLeft, MiddleRight, UpperLeft, LowerLeft }
+    public enum TextAnchor { MiddleCenter, MiddleLeft, MiddleRight, UpperLeft, LowerLeft, UpperCenter, UpperRight, LowerCenter, LowerRight }
     public enum HorizontalWrapMode { Wrap, Overflow }
     public enum VerticalWrapMode { Truncate, Overflow }
 
@@ -210,9 +240,14 @@ namespace UnityEngine.UI
     {
         public UnityEngine.Color color { get; set; }
         public bool raycastTarget { get; set; }
+        public UnityEngine.RectTransform rectTransform => new UnityEngine.RectTransform();
     }
 
-    public class Image : Graphic { }
+    public class Image : Graphic
+    {
+        public UnityEngine.Sprite sprite { get; set; }
+        public bool preserveAspect { get; set; }
+    }
 
     public class RawImage : Graphic
     {

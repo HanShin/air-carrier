@@ -193,7 +193,7 @@ namespace AetherArk.Core
         public void BeginCombat(int tier, bool finalBattle)
         {
             var combatState = State.random.combat;
-            State.enemyShip = ContentCatalog.CreateEnemy(tier, ref combatState);
+            State.enemyShip = ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, ref combatState);
             if (finalBattle)
             {
                 State.enemyShip.maxHull += 10f;

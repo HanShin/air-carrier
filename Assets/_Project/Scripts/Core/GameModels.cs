@@ -98,6 +98,7 @@ namespace AetherArk.Core
     {
         public string id;
         public string displayName;
+        public string nameKey;
         public float hull;
         public float maxHull;
         public float armor;

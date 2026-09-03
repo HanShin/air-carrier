@@ -103,6 +103,9 @@ namespace AetherArk.Content
             Add("ui.systems", "함선 구획", "SHIP COMPARTMENTS");
             Add("ui.crew", "승무원 — 선택 후 구획 이동", "CREW — select, then choose a room");
             Add("ui.enemy", "제국 함선 — 공격 목표 선택", "IMPERIAL SHIP — select a target");
+            Add("ship.enemy_cutter", "제국 추격 커터", "Imperial Pursuit Cutter");
+            Add("ship.enemy_cruiser", "제국 폭풍 순양함", "Imperial Storm Cruiser");
+            Add("ship.enemy_carrier", "제국 강습 항모", "Imperial Strike Carrier");
             Add("ui.squadrons", "함재기 편대", "AIR WINGS");
             Add("ui.fire", "주포 발사", "Fire main battery");
             Add("ui.overcharge", "공명 과부하", "Resonance overcharge");

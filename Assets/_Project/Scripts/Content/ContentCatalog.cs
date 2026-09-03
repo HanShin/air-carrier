@@ -37,34 +37,109 @@ namespace AetherArk.Content
             return ship;
         }
 
-        public static ShipState CreateEnemy(int tier, ref uint random)
+        public static ShipState CreateEnemy(int tier, bool allowVariants, ref uint random)
         {
             var elite = tier >= 2;
+            var carrier = !elite && allowVariants && SeededRandom.Chance(ref random, 0.4f);
             var ship = new ShipState
             {
-                id = elite ? "enemy_cruiser" : "enemy_cutter",
-                displayName = elite ? "Imperial Storm Cruiser" : "Imperial Pursuit Cutter",
-                hull = elite ? 34f : 24f,
-                maxHull = elite ? 34f : 24f,
-                armor = elite ? 18f : 10f,
-                maxArmor = elite ? 18f : 10f,
-                ward = elite ? 12f : 8f,
-                maxWard = elite ? 12f : 8f,
-                coreOutput = elite ? 11 : 8,
+                id = elite ? "enemy_cruiser" : carrier ? "enemy_carrier" : "enemy_cutter",
+                displayName = elite ? "Imperial Storm Cruiser" : carrier ? "Imperial Strike Carrier" : "Imperial Pursuit Cutter",
+                nameKey = elite ? "ship.enemy_cruiser" : carrier ? "ship.enemy_carrier" : "ship.enemy_cutter",
+                hull = elite ? 34f : carrier ? 28f : 24f,
+                maxHull = elite ? 34f : carrier ? 28f : 24f,
+                armor = elite ? 18f : carrier ? 12f : 10f,
+                maxArmor = elite ? 18f : carrier ? 12f : 10f,
+                ward = elite ? 12f : carrier ? 10f : 8f,
+                maxWard = elite ? 12f : carrier ? 10f : 8f,
+                coreOutput = elite ? 11 : carrier ? 10 : 8,
                 altitude = (AltitudeBand)SeededRandom.Range(ref random, 0, 3)
             };
 
             AddSystem(ship, ShipSystemType.Bridge, "system.bridge", 1, 2);
             AddSystem(ship, ShipSystemType.AetherCore, "system.core", 0, 0);
             AddSystem(ship, ShipSystemType.LiftArray, "system.lift", 1, 3);
-            AddSystem(ship, ShipSystemType.Engines, "system.engines", 2, 3);
+            AddSystem(ship, ShipSystemType.Engines, "system.engines", carrier ? 1 : 2, 3);
             AddSystem(ship, ShipSystemType.Ward, "system.ward", elite ? 2 : 1, 3);
-            AddSystem(ship, ShipSystemType.Weapons, "system.weapons", elite ? 3 : 2, 4);
-            AddSystem(ship, ShipSystemType.FlightDeck, "system.deck", elite ? 1 : 0, 2);
-            AddSystem(ship, ShipSystemType.Sensors, "system.sensors", 0, 2);
+            AddSystem(ship, ShipSystemType.Weapons, "system.weapons", elite ? 3 : carrier ? 1 : 2, carrier ? 3 : 4);
+            AddSystem(ship, ShipSystemType.FlightDeck, "system.deck", elite ? 1 : carrier ? 3 : 0, carrier ? 4 : 2);
+            AddSystem(ship, ShipSystemType.Sensors, "system.sensors", carrier ? 1 : 0, 2);
             AddSystem(ship, ShipSystemType.Infirmary, "system.infirmary", 0, 1);
             AddSystem(ship, ShipSystemType.LifeSupport, "system.life", 1, 2);
             return ship;
+        }
+
+        private static readonly Dictionary<string, DeckPlan> DeckPlans = BuildDeckPlans();
+
+        public static DeckPlan GetDeckPlan(string shipId)
+        {
+            return shipId != null && DeckPlans.TryGetValue(shipId, out var plan) ? plan : null;
+        }
+
+        private static Dictionary<string, DeckPlan> BuildDeckPlans()
+        {
+            var plans = new Dictionary<string, DeckPlan>();
+            // Bow faces right (higher column). Row 0 is the top row.
+            plans["ship_vanguard"] = Plan("ship_vanguard", 6, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 2),
+                Tile(ShipSystemType.LiftArray, 1, 0),
+                Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.FlightDeck, 2, 0, 2, 2),
+                Tile(ShipSystemType.Sensors, 4, 0),
+                Tile(ShipSystemType.Weapons, 4, 1, 1, 2),
+                Tile(ShipSystemType.Bridge, 5, 0, 1, 2),
+                Tile(ShipSystemType.LifeSupport, 0, 2),
+                Tile(ShipSystemType.Infirmary, 1, 2),
+                Tile(ShipSystemType.Ward, 2, 2, 2, 1));
+
+            plans["enemy_cutter"] = Plan("enemy_cutter", 5, 2,
+                Tile(ShipSystemType.Engines, 0, 0),
+                Tile(ShipSystemType.AetherCore, 1, 0),
+                Tile(ShipSystemType.FlightDeck, 2, 0),
+                Tile(ShipSystemType.Sensors, 3, 0),
+                Tile(ShipSystemType.Bridge, 4, 0),
+                Tile(ShipSystemType.LifeSupport, 0, 1),
+                Tile(ShipSystemType.LiftArray, 1, 1),
+                Tile(ShipSystemType.Ward, 2, 1),
+                Tile(ShipSystemType.Weapons, 3, 1),
+                Tile(ShipSystemType.Infirmary, 4, 1));
+
+            plans["enemy_cruiser"] = Plan("enemy_cruiser", 6, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 2),
+                Tile(ShipSystemType.LiftArray, 1, 0),
+                Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.Ward, 2, 0, 2, 1),
+                Tile(ShipSystemType.FlightDeck, 2, 1, 1, 2),
+                Tile(ShipSystemType.Weapons, 3, 1, 2, 2),
+                Tile(ShipSystemType.Sensors, 4, 0),
+                Tile(ShipSystemType.Bridge, 5, 0, 1, 2),
+                Tile(ShipSystemType.LifeSupport, 0, 2),
+                Tile(ShipSystemType.Infirmary, 1, 2));
+
+            plans["enemy_carrier"] = Plan("enemy_carrier", 7, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 2),
+                Tile(ShipSystemType.LiftArray, 1, 0),
+                Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.FlightDeck, 2, 0, 3, 2),
+                Tile(ShipSystemType.Sensors, 5, 0),
+                Tile(ShipSystemType.Weapons, 5, 1),
+                Tile(ShipSystemType.Bridge, 6, 0, 1, 2),
+                Tile(ShipSystemType.LifeSupport, 0, 2),
+                Tile(ShipSystemType.Infirmary, 1, 2),
+                Tile(ShipSystemType.Ward, 2, 2, 2, 1));
+            return plans;
+        }
+
+        private static DeckPlan Plan(string shipId, int columns, int rows, params DeckTile[] tiles)
+        {
+            var plan = new DeckPlan { shipId = shipId, columns = columns, rows = rows };
+            plan.tiles.AddRange(tiles);
+            return plan;
+        }
+
+        private static DeckTile Tile(ShipSystemType system, int column, int row, int width = 1, int height = 1)
+        {
+            return new DeckTile { system = system, column = column, row = row, width = width, height = height };
         }
 
         private static void AddSystem(ShipState ship, ShipSystemType type, string key, int power, int maxPower)
