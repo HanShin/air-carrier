@@ -1,8 +1,8 @@
 # Aether Ark — playable vertical slice
 
-`Aether Ark` is a Unity 6 prototype for a real-time-with-pause sky-carrier roguelite. It implements a complete short run from captain setup through a branching route and a final Sky Gate battle.
+`Aether Ark` is a Unity 6 prototype for a real-time-with-pause sky-carrier roguelite. It implements a campaign from captain setup through branching regional routes to a final Sky Gate battle.
 
-The first expedition defaults to Story difficulty and a locked, audited seed. It contains seven jumps, a mandatory pursuit battle, an elite blockade, and a reinforced Sky Gate finale. After the first victory, subsequent expeditions use random seeds.
+The first expedition defaults to Story difficulty and a locked, audited seed. It is a single region of seven jumps with a mandatory pursuit battle, an elite blockade, and a reinforced Sky Gate finale. After the first victory, expeditions use random seeds and run the full four-region campaign: Dawn Archipelago, Storm Corridor, Icefield Heights and Imperial Cordon, each with its own weather and encounter mix and progressively tougher enemies. Every gate passed is a port stop: full repair, resupply to at least starting stocks, and a flagship refit (+hull, +armor, +ward, +1 core output).
 
 ## What is implemented
 
@@ -13,8 +13,9 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 
 - Route map drawn as a star map: circular nodes with encounter glyphs and a numbered badge on reachable nodes, a storm-front band over closed columns plus an amber warning band for the column that closes after the next jump, a legend, and a select-then-depart preview panel (aether cost vs stock, weather modifiers, recommended altitude, threat note). Number keys still jump immediately.
 - Runtime-built Korean/English UI with no scene assembly required.
+- Four sequential regions (`ContentCatalog.Regions`): per-region weather and encounter weights, extra-cost chance and enemy stat multiplier. Region 1 reproduces the original generator exactly so the locked first expedition is unchanged.
 - Branching route map with storm closure, aether costs, weather, altitude recommendations, events, trading, rescue, and combat nodes.
-- Layered ward → armor → hull damage, ten ship compartments, fires, breaches, oxygen, repairs, crew injury, rescue windows, and captain-loss defeat. Any hit pauses a ship's ward regeneration for 3.5 s, so sustained fire wears a ward down instead of stalling against it.
+- Layered ward → armor → hull damage, ten ship compartments, fires, breaches, oxygen, repairs, crew injury, rescue windows, and captain-loss defeat. Any hit pauses a ship's ward regeneration for 6 s (longer than a weapon cycle), so sustained fire wears a ward down instead of stalling against it even when shots miss.
 - Power allocation, resonator overcharge and instability accidents.
 - Free pause, adjustable combat speed, warning auto-pause, UI scaling, high contrast, reduced motion, and a rebindable pause key.
 - Two persistent air wings with intercept, bombard, escort, recon, and assault missions.

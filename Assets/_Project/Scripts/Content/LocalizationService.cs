@@ -97,6 +97,12 @@ namespace AetherArk.Content
             Add("ui.current", "현재 위치", "CURRENT");
             Add("ui.blocked", "폭풍 봉쇄", "STORMED");
             Add("ui.depart", "출항", "Depart");
+            Add("ui.region", "지역 {0}", "Region {0}");
+            Add("region.dawn_archipelago", "여명 군도", "Dawn Archipelago");
+            Add("region.storm_corridor", "폭풍 회랑", "Storm Corridor");
+            Add("region.icefield_heights", "빙운 고원", "Icefield Heights");
+            Add("region.imperial_cordon", "제국 봉쇄권", "Imperial Cordon");
+            Add("log.region_cleared", "천공문을 통과했습니다. 지역 {0} 진입 — 항구에서 재보급과 수리를 마쳤습니다.", "Through the gate. Entering region {0} — resupplied and repaired in port.");
             Add("ui.chance", "성공 {0}%", "{0}% chance");
             Add("ui.route_select_hint", "노드를 클릭해 항로를 확인하고 출항하십시오.", "Click a node to inspect it, then depart.");
             Add("ui.route_preview_empty", "선택된 항로 없음", "No route selected");

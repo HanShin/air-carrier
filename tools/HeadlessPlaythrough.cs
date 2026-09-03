@@ -17,6 +17,7 @@ internal static class HeadlessPlaythrough
         public int Survivors;
         public int Morale;
         public bool Stalemate;
+        public int Regions = 1;
         public string StalemateEnemy;
     }
 
@@ -66,7 +67,7 @@ internal static class HeadlessPlaythrough
         if (forcedEnemy != null) Console.WriteLine($"Forced enemy: {forcedEnemy}");
         Console.WriteLine($"Runs: {results.Count}");
         Console.WriteLine($"Victories: {victories.Count} ({victories.Count * 100f / results.Count:0.0}%)");
-        Console.WriteLine($"Seven-jump completions: {victories.FindAll(result => result.Jumps == 7).Count}/{victories.Count}");
+        Console.WriteLine($"Full-length completions (7 jumps x regions): {victories.FindAll(result => result.Jumps == 7 * result.Regions).Count}/{victories.Count}");
         Console.WriteLine($"Battles per victory: {minBattles}–{maxBattles}");
         Console.WriteLine($"Average active combat simulation: {combatSeconds / victories.Count / 60f:0.0} min");
         Console.WriteLine($"Estimated human first-run duration: {estimatedHumanMinutes / victories.Count:0.0} min");
@@ -125,7 +126,8 @@ internal static class HeadlessPlaythrough
 
         result.Victory = simulation.State.phase == GamePhase.Victory;
         result.Defeat = simulation.State.defeatReason;
-        result.Jumps = simulation.State.travelCount;
+        result.Jumps = simulation.State.totalTravelCount;
+        result.Regions = simulation.State.regionCount;
         result.Survivors = simulation.State.convoy.survivors;
         result.Morale = simulation.State.convoy.morale;
         return result;
@@ -137,6 +139,13 @@ internal static class HeadlessPlaythrough
         var replacement = ContentCatalog.CreateEnemyById(forcedEnemy, ref random);
         if (replacement == null) throw new ArgumentException("Unknown enemy id: " + forcedEnemy);
         simulation.State.random.combat = random;
+        var scale = ContentCatalog.GetRegion(simulation.State.regionIndex).enemyStatMultiplier;
+        if (scale > 1f)
+        {
+            replacement.maxHull = (float)Math.Round(replacement.maxHull * scale, 1); replacement.hull = replacement.maxHull;
+            replacement.maxArmor = (float)Math.Round(replacement.maxArmor * scale, 1); replacement.armor = replacement.maxArmor;
+            replacement.maxWard = (float)Math.Round(replacement.maxWard * scale, 1); replacement.ward = replacement.maxWard;
+        }
         if (simulation.State.isFinalBattle)
         {
             replacement.maxHull += 10f; replacement.hull += 10f;

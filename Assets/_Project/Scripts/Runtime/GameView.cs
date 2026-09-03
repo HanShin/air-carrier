@@ -187,8 +187,12 @@ namespace AetherArk.Runtime
             if (!string.IsNullOrEmpty(selectedRouteNodeId) && !state.routeNodes.Exists(node => node.id == selectedRouteNodeId && !node.blocked))
                 selectedRouteNodeId = null;
 
+            var region = ContentCatalog.GetRegion(state.regionIndex);
+            var regionLabel = state.regionCount > 1 ? $"{l10n.T("ui.region", $"{state.regionIndex}/{state.regionCount}")} — {l10n.T(region.nameKey)}" : l10n.T(region.nameKey);
             ui.Text("RouteTitle", ui.Root, l10n.T("ui.route_title"), 34, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
                 new Vector2(84f, 900f), new Vector2(700f, 56f), FontStyle.Bold);
+            ui.Text("RegionTitle", ui.Root, regionLabel, 20, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(790f, 900f), new Vector2(700f, 56f), FontStyle.Bold);
             ui.Text("RouteHint", ui.Root, l10n.T("ui.route_select_hint") + "  " + l10n.T("ui.route_hint"), 15, UiFactory.TextMuted, TextAnchor.MiddleLeft,
                 new Vector2(84f, 862f), new Vector2(1500f, 34f));
 

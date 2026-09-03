@@ -658,10 +658,10 @@ namespace AetherArk.Tests
 
             simulation.ApplyDamage(ship, ShipSystemType.Weapons, 4f, false);
             var afterHit = ship.ward;
-            for (var i = 0; i < 20; i++) simulation.Tick(0.1f); // 2 s: inside the recharge delay
+            for (var i = 0; i < 50; i++) simulation.Tick(0.1f); // 5 s: still inside the 6 s recharge delay
             Assert.That(ship.ward, Is.EqualTo(afterHit).Within(0.001f), "ward must not regenerate during the recharge delay");
 
-            for (var i = 0; i < 40; i++) simulation.Tick(0.1f); // 6 s total: delay has expired
+            for (var i = 0; i < 70; i++) simulation.Tick(0.1f); // 9 s total: the 6 s delay has expired
             Assert.That(ship.ward, Is.GreaterThan(afterHit), "ward should regenerate once the delay expires");
         }
 
@@ -848,6 +848,183 @@ namespace AetherArk.Tests
             {
                 if (Array.IndexOf(EventTypes, node.encounterType) < 0) continue;
                 Assert.That(baseline, Does.Contain(node.encounterId), node.id);
+            }
+        }
+
+        [Test]
+        public void Regions_FourAreDefinedAndLocalized()
+        {
+            Assert.That(ContentCatalog.RegionCount, Is.EqualTo(4));
+            var ko = new LocalizationService(Language.Korean);
+            var en = new LocalizationService(Language.English);
+            for (var index = 1; index <= ContentCatalog.RegionCount; index++)
+            {
+                var region = ContentCatalog.GetRegion(index);
+                Assert.That(region, Is.Not.Null, "region " + index);
+                Assert.That(region.index, Is.EqualTo(index));
+                Assert.That(ko.T(region.nameKey), Is.Not.EqualTo(region.nameKey));
+                Assert.That(en.T(region.nameKey), Is.Not.EqualTo(region.nameKey));
+            }
+        }
+
+        [Test]
+        public void Route_RegionOneMatchesTheLegacyGenerator()
+        {
+            var legacy = ContentCatalog.CreateRoute(32838);
+            var region = ContentCatalog.CreateRoute(32838, 1);
+            Assert.That(region.Count, Is.EqualTo(legacy.Count));
+            for (var i = 0; i < legacy.Count; i++)
+            {
+                Assert.That(region[i].encounterType, Is.EqualTo(legacy[i].encounterType), region[i].id);
+                Assert.That(region[i].weather, Is.EqualTo(legacy[i].weather), region[i].id);
+                Assert.That(region[i].aetherCost, Is.EqualTo(legacy[i].aetherCost), region[i].id);
+            }
+        }
+
+        private static float Share(int regionIndex, Func<RouteNodeState, bool> predicate, Func<RouteNodeState, bool> population)
+        {
+            var hits = 0; var total = 0;
+            for (var seed = 1; seed <= 150; seed++)
+            {
+                foreach (var node in ContentCatalog.CreateRoute(seed * 31, regionIndex))
+                {
+                    if (!population(node)) continue;
+                    total++;
+                    if (predicate(node)) hits++;
+                }
+            }
+            return total == 0 ? 0f : (float)hits / total;
+        }
+
+        [Test]
+        public void Route_LaterRegionsBiasWeatherAndEncounters()
+        {
+            Func<RouteNodeState, bool> generated = node => node.column >= 1 && node.column <= 6;
+            Func<RouteNodeState, bool> rollable = node => node.column >= 1 && node.column <= 6 && node.column != 2 && node.column != 6;
+
+            var stormyInCorridor = Share(2, n => n.weather == WeatherType.Thunderhead || n.weather == WeatherType.Turbulence, generated);
+            var stormyInDawn = Share(1, n => n.weather == WeatherType.Thunderhead || n.weather == WeatherType.Turbulence, generated);
+            Assert.That(stormyInCorridor, Is.GreaterThan(0.45f));
+            Assert.That(stormyInCorridor, Is.GreaterThan(stormyInDawn + 0.1f));
+
+            var icyInHeights = Share(3, n => n.weather == WeatherType.Icing || n.weather == WeatherType.CloudCover, generated);
+            Assert.That(icyInHeights, Is.GreaterThan(0.45f));
+
+            var checkpointsInCordon = Share(4, n => n.encounterType == EncounterType.Checkpoint, rollable);
+            var checkpointsInDawn = Share(1, n => n.encounterType == EncounterType.Checkpoint, rollable);
+            Assert.That(checkpointsInCordon, Is.GreaterThan(checkpointsInDawn + 0.08f));
+
+            var rescuesInHeights = Share(3, n => n.encounterType == EncounterType.Rescue || n.encounterType == EncounterType.Salvage, rollable);
+            var rescuesInDawn = Share(1, n => n.encounterType == EncounterType.Rescue || n.encounterType == EncounterType.Salvage, rollable);
+            Assert.That(rescuesInHeights, Is.GreaterThan(rescuesInDawn + 0.08f));
+        }
+
+        private static void WinCurrentBattle(GameSimulation simulation)
+        {
+            simulation.ApplyDamage(simulation.State.enemyShip, ShipSystemType.AetherCore, 999f, true);
+            simulation.SetPaused(false);
+            simulation.Tick(0.1f);
+        }
+
+        [Test]
+        public void Campaign_GateVictoryAdvancesToTheNextRegionWithAPortStop()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 505);
+            var state = simulation.State;
+            Assert.That(state.regionCount, Is.EqualTo(4));
+            Assert.That(state.regionIndex, Is.EqualTo(1));
+            var firstRoute = state.routeNodes.ConvertAll(node => node.encounterType.ToString() + node.weather);
+
+            state.playerShip.hull = 10f;
+            state.playerShip.armor = 2f;
+            state.travelCount = 7;
+            state.stormColumn = 4;
+            var aetherBefore = state.resources.aether;
+            var maxHullBefore = state.playerShip.maxHull;
+            simulation.BeginCombat(2, true);
+            WinCurrentBattle(simulation);
+
+            Assert.That(state.phase, Is.EqualTo(GamePhase.RouteMap), "the campaign should continue after the first gate");
+            Assert.That(state.regionIndex, Is.EqualTo(2));
+            Assert.That(state.travelCount, Is.EqualTo(0));
+            Assert.That(state.stormColumn, Is.EqualTo(-1));
+            Assert.That(state.currentNodeId, Is.EqualTo("n0_1"));
+            Assert.That(state.enemyShip, Is.Null);
+            Assert.That(state.playerShip.hull, Is.GreaterThan(10f));
+            Assert.That(state.playerShip.armor, Is.EqualTo(state.playerShip.maxArmor).Within(0.001f));
+            Assert.That(state.resources.aether, Is.GreaterThan(aetherBefore));
+            Assert.That(state.routeNodes.ConvertAll(node => node.encounterType.ToString() + node.weather), Is.Not.EqualTo(firstRoute), "the next region needs its own route");
+            Assert.That(state.combatLog.Exists(entry => entry.key == "log.region_cleared"), Is.True);
+            Assert.That(state.playerShip.hull, Is.EqualTo(state.playerShip.maxHull).Within(0.001f), "port stop should fully repair the hull");
+            Assert.That(state.playerShip.coreOutput, Is.EqualTo(12 + 1), "each cleared region should grow the core output");
+            Assert.That(state.playerShip.maxHull, Is.EqualTo(maxHullBefore + 4f).Within(0.001f), "each cleared region should grow the hull");
+            Assert.That(state.playerShip.AllocatedPower(), Is.LessThanOrEqualTo(state.playerShip.coreOutput));
+            Assert.That(state.resources.ordnance, Is.GreaterThanOrEqualTo(8));
+        }
+
+        [Test]
+        public void Campaign_LastRegionGateVictoryEndsTheRun()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 506);
+            simulation.State.regionIndex = simulation.State.regionCount;
+            simulation.BeginCombat(2, true);
+            WinCurrentBattle(simulation);
+            Assert.That(simulation.State.phase, Is.EqualTo(GamePhase.Victory));
+        }
+
+        [Test]
+        public void Campaign_FirstExpeditionIsASingleRegion()
+        {
+            var profile = Profile(Difficulty.Story);
+            profile.tutorialSeen = false;
+            var simulation = GameSimulation.NewRun(profile, GameSimulation.FirstExpeditionSeed);
+            Assert.That(simulation.State.regionCount, Is.EqualTo(1));
+            simulation.BeginCombat(2, true);
+            WinCurrentBattle(simulation);
+            Assert.That(simulation.State.phase, Is.EqualTo(GamePhase.Victory));
+        }
+
+        [Test]
+        public void Campaign_EnemiesScaleWithTheRegion()
+        {
+            var profile = Profile(Difficulty.Story);
+            profile.tutorialSeen = false; // variants disabled: always the cutter, so hulls are comparable
+            var early = GameSimulation.NewRun(profile, 9);
+            early.BeginCombat(1, false);
+            var late = GameSimulation.NewRun(profile, 9);
+            late.State.regionIndex = 3;
+            late.BeginCombat(1, false);
+            Assert.That(late.State.enemyShip.id, Is.EqualTo(early.State.enemyShip.id));
+            Assert.That(late.State.enemyShip.maxHull, Is.GreaterThan(early.State.enemyShip.maxHull * 1.15f));
+            Assert.That(late.State.enemyShip.hull, Is.EqualTo(late.State.enemyShip.maxHull).Within(0.001f));
+        }
+
+        [Test]
+        public void SaveService_RoundTripsRegionFields()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "aether-ark-tests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var service = new SaveService(root);
+                var profile = Profile();
+                profile.tutorialSeen = true;
+                var run = GameSimulation.NewRun(profile, 12).State;
+                run.regionIndex = 3;
+                run.totalTravelCount = 15;
+                service.SaveRun(run);
+                var loaded = service.LoadRun();
+                Assert.That(loaded.regionIndex, Is.EqualTo(3));
+                Assert.That(loaded.regionCount, Is.EqualTo(4));
+                Assert.That(loaded.totalTravelCount, Is.EqualTo(15));
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
             }
         }
 

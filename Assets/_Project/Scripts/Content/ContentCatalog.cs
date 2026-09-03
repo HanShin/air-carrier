@@ -344,9 +344,53 @@ namespace AetherArk.Content
             };
         }
 
+        private static readonly RegionDefinition[] Regions =
+        {
+            // Region 1 reproduces the legacy rolls exactly: weather total 6 (uniform), encounters 38/15/15/11/11/10.
+            new RegionDefinition { id = "dawn_archipelago", nameKey = "region.dawn_archipelago", index = 1,
+                weatherWeights = new[] { 1, 1, 1, 1, 1, 1 }, encounterWeights = new[] { 38, 15, 15, 11, 11, 10 }, enemyStatMultiplier = 1f, extraAetherCostChance = 0.2f },
+            new RegionDefinition { id = "storm_corridor", nameKey = "region.storm_corridor", index = 2,
+                weatherWeights = new[] { 1, 4, 4, 1, 1, 1 }, encounterWeights = new[] { 36, 12, 13, 6, 9, 24 }, enemyStatMultiplier = 1.08f, extraAetherCostChance = 0.25f },
+            new RegionDefinition { id = "icefield_heights", nameKey = "region.icefield_heights", index = 3,
+                weatherWeights = new[] { 1, 1, 1, 1, 4, 4 }, encounterWeights = new[] { 34, 22, 22, 8, 6, 8 }, enemyStatMultiplier = 1.16f, extraAetherCostChance = 0.3f },
+            new RegionDefinition { id = "imperial_cordon", nameKey = "region.imperial_cordon", index = 4,
+                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.24f, extraAetherCostChance = 0.35f }
+        };
+
+        public static int RegionCount => Regions.Length;
+
+        public static RegionDefinition GetRegion(int index)
+        {
+            if (index < 1) index = 1;
+            if (index > Regions.Length) index = Regions.Length;
+            return Regions[index - 1];
+        }
+
+        private static int WeightedIndex(ref uint random, int[] weights)
+        {
+            var total = 0;
+            for (var i = 0; i < weights.Length; i++) total += weights[i];
+            var roll = SeededRandom.Range(ref random, 0, total);
+            for (var i = 0; i < weights.Length; i++)
+            {
+                if (roll < weights[i]) return i;
+                roll -= weights[i];
+            }
+            return weights.Length - 1;
+        }
+
         public static List<RouteNodeState> CreateRoute(int seed)
         {
-            var random = SeededRandom.Seed(seed, 0xA11CEu);
+            return CreateRoute(seed, 1);
+        }
+
+        public static List<RouteNodeState> CreateRoute(int seed, int regionIndex)
+        {
+            var region = GetRegion(regionIndex);
+            // Region 1 keeps the legacy stream so the locked first expedition is unchanged.
+            var random = regionIndex <= 1
+                ? SeededRandom.Seed(seed, 0xA11CEu)
+                : SeededRandom.Seed(unchecked(seed + regionIndex * 7919), 0xA11CEu ^ (uint)(regionIndex * 0x9E37u));
             var nodes = new List<RouteNodeState>();
             nodes.Add(new RouteNodeState
             {
@@ -358,16 +402,16 @@ namespace AetherArk.Content
             {
                 for (var lane = 0; lane < 3; lane++)
                 {
-                    var encounter = EncounterFor(column, lane, ref random);
+                    var encounter = EncounterFor(column, lane, region, ref random);
                     nodes.Add(new RouteNodeState
                     {
                         id = $"n{column}_{lane}",
                         nameKey = "node." + encounter.ToString().ToLowerInvariant(),
                         column = column,
                         lane = lane,
-                        aetherCost = 1 + (SeededRandom.Chance(ref random, 0.2f) ? 1 : 0),
+                        aetherCost = 1 + (SeededRandom.Chance(ref random, region.extraAetherCostChance) ? 1 : 0),
                         recommendedAltitude = (AltitudeBand)SeededRandom.Range(ref random, 0, 3),
-                        weather = (WeatherType)SeededRandom.Range(ref random, 0, 6),
+                        weather = (WeatherType)WeightedIndex(ref random, region.weatherWeights),
                         encounterType = encounter,
                         encounterId = EncounterIdFor(encounter)
                     });
@@ -395,17 +439,14 @@ namespace AetherArk.Content
             return nodes;
         }
 
-        private static EncounterType EncounterFor(int column, int lane, ref uint random)
+        private static readonly EncounterType[] RollableEncounters =
+            { EncounterType.Battle, EncounterType.Rescue, EncounterType.Salvage, EncounterType.Trade, EncounterType.Checkpoint, EncounterType.Storm };
+
+        private static EncounterType EncounterFor(int column, int lane, RegionDefinition region, ref uint random)
         {
             if (column == 2) return EncounterType.Battle;
             if (column == 6) return EncounterType.EliteBattle;
-            var roll = SeededRandom.Range(ref random, 0, 100);
-            if (roll < 38) return EncounterType.Battle;
-            if (roll < 53) return EncounterType.Rescue;
-            if (roll < 68) return EncounterType.Salvage;
-            if (roll < 79) return EncounterType.Trade;
-            if (roll < 90) return EncounterType.Checkpoint;
-            return EncounterType.Storm;
+            return RollableEncounters[WeightedIndex(ref random, region.encounterWeights)];
         }
 
         private static string EncounterIdFor(EncounterType type)

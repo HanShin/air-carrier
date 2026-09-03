@@ -234,6 +234,20 @@ namespace AetherArk.Core
     }
 
     [Serializable]
+    public sealed class RegionDefinition
+    {
+        public string id;
+        public string nameKey;
+        public int index;
+        /// <summary>Weights in WeatherType enum order (Clear, Thunderhead, Turbulence, AetherCurrent, Icing, CloudCover).</summary>
+        public int[] weatherWeights;
+        /// <summary>Weights for Battle, Rescue, Salvage, Trade, Checkpoint, Storm on rollable columns.</summary>
+        public int[] encounterWeights;
+        public float enemyStatMultiplier = 1f;
+        public float extraAetherCostChance = 0.2f;
+    }
+
+    [Serializable]
     public sealed class WeatherProfile
     {
         public WeatherType type;
@@ -277,7 +291,10 @@ namespace AetherArk.Core
         public GamePhase phase = GamePhase.RouteMap;
         public Difficulty difficulty;
         public int regionIndex = 1;
+        /// <summary>Regions in this campaign: 1 for the locked first expedition, otherwise the full roster.</summary>
+        public int regionCount = 1;
         public int travelCount;
+        public int totalTravelCount;
         public int stormColumn = -1;
         public string currentNodeId = "n0_1";
         public string activeEncounterId;

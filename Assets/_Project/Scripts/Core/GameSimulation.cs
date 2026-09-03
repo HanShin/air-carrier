@@ -20,6 +20,7 @@ namespace AetherArk.Core
             {
                 seed = seed,
                 isFirstExpedition = !profile.tutorialSeen,
+                regionCount = profile.tutorialSeen ? ContentCatalog.RegionCount : 1,
                 difficulty = profile.difficulty,
                 autoPauseOnWarning = profile.accessibility.autoPauseOnWarning,
                 playerShip = ContentCatalog.CreateVanguard(),
@@ -89,6 +90,7 @@ namespace AetherArk.Core
             State.currentNodeId = target.id;
             target.visited = true;
             State.travelCount++;
+            State.totalTravelCount++;
             State.currentWeather = target.weather;
             if (State.convoy.supportCooldown > 0) State.convoy.supportCooldown--;
 
@@ -233,6 +235,14 @@ namespace AetherArk.Core
         {
             var combatState = State.random.combat;
             State.enemyShip = ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, ref combatState);
+            var scale = ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
+            if (scale > 1f)
+            {
+                var enemy = State.enemyShip;
+                enemy.maxHull = (float)Math.Round(enemy.maxHull * scale, 1); enemy.hull = enemy.maxHull;
+                enemy.maxArmor = (float)Math.Round(enemy.maxArmor * scale, 1); enemy.armor = enemy.maxArmor;
+                enemy.maxWard = (float)Math.Round(enemy.maxWard * scale, 1); enemy.ward = enemy.maxWard;
+            }
             if (finalBattle)
             {
                 State.enemyShip.maxHull += 10f;
@@ -313,7 +323,8 @@ namespace AetherArk.Core
             }
         }
 
-        public const float WardRechargeDelay = 3.5f;
+        /// <summary>A single missed shot must not hand the ward its regeneration back; longer than one weapon cycle.</summary>
+        public const float WardRechargeDelay = 6f;
 
         private void TickWard(ShipState ship, float dt)
         {
@@ -907,9 +918,13 @@ namespace AetherArk.Core
             State.isPaused = true;
             var reward = State.isFinalBattle ? 0 : (State.difficulty == Difficulty.Harsh ? 7 : 9);
             State.resources.salvage += reward;
-            State.resources.ordnance += State.isFinalBattle ? 0 : 1;
+            State.resources.ordnance += State.isFinalBattle ? 0 : (State.regionIndex >= 3 ? 2 : 1);
             for (var i = 0; i < State.crew.Count; i++) State.crew[i].onSortie = false;
-            if (State.isFinalBattle)
+            if (State.isFinalBattle && State.regionIndex < State.regionCount)
+            {
+                AdvanceRegion();
+            }
+            else if (State.isFinalBattle)
             {
                 State.phase = GamePhase.Victory;
                 State.convoy.morale = Math.Min(100, State.convoy.morale + 10);
@@ -920,6 +935,59 @@ namespace AetherArk.Core
                 State.phase = GamePhase.RouteMap;
                 AddLog("log.combat_victory");
             }
+        }
+
+        /// <summary>Port stop between regions: the next region's route, counters reset and a resupply.</summary>
+        private void AdvanceRegion()
+        {
+            State.regionIndex++;
+            State.routeNodes = ContentCatalog.CreateRoute(State.seed, State.regionIndex);
+            if (!State.isFirstExpedition) ContentCatalog.AssignEncounterVariants(State.routeNodes, unchecked(State.seed + State.regionIndex * 104729));
+            State.travelCount = 0;
+            State.stormColumn = -1;
+            State.currentNodeId = "n0_1";
+            State.activeEncounterId = null;
+            State.enemyShip = null;
+            State.isFinalBattle = false;
+            State.phase = GamePhase.RouteMap;
+
+            // Port refit: the flagship grows with every gate it passes, so later regions are survivable.
+            var ship = State.playerShip;
+            ship.maxHull += 4f;
+            ship.maxArmor += 3f;
+            ship.maxWard += 2f;
+            ship.coreOutput += 1;
+            var weapons = ship.GetSystem(ShipSystemType.Weapons);
+            if (weapons != null && weapons.power < weapons.maxPower && ship.AllocatedPower() < ship.coreOutput) weapons.power++;
+            ship.hull = ship.maxHull;
+            ship.armor = ship.maxArmor;
+            ship.ward = ship.maxWard;
+            ship.instability = 0f;
+            ship.wardRechargeSeconds = 0f;
+            for (var i = 0; i < ship.systems.Count; i++) { ship.systems[i].damage = 0f; ship.systems[i].disabledSeconds = 0f; }
+            for (var i = 0; i < ship.rooms.Count; i++) { ship.rooms[i].fire = 0f; ship.rooms[i].breach = 0f; ship.rooms[i].oxygen = 100f; ship.rooms[i].intruders = 0; }
+            for (var i = 0; i < State.crew.Count; i++)
+            {
+                var crew = State.crew[i];
+                if (crew.isDead) continue;
+                crew.health = crew.maxHealth;
+                crew.downedSeconds = 0f;
+                crew.onSortie = false;
+            }
+            for (var i = 0; i < State.squadrons.Count; i++)
+            {
+                var squadron = State.squadrons[i];
+                squadron.strength = squadron.maxStrength;
+                squadron.status = SquadronStatus.Ready;
+                squadron.mission = SquadronMission.None;
+            }
+            State.resources.aether = Math.Max(State.resources.aether + 6, 16);
+            State.resources.supplies = Math.Max(State.resources.supplies + 4, 12);
+            State.resources.ordnance = Math.Max(State.resources.ordnance + 3, 8);
+            State.resources.salvage += 8;
+            State.convoy.morale = Math.Min(100, State.convoy.morale + 5);
+            State.convoy.supportCooldown = 0;
+            AddLog("log.region_cleared", State.regionIndex.ToString());
         }
 
         private void CheckDefeat()
