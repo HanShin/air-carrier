@@ -120,6 +120,10 @@ namespace AetherArk.Content
             Add("ship.enemy_cutter", "제국 추격 커터", "Imperial Pursuit Cutter");
             Add("ship.enemy_cruiser", "제국 폭풍 순양함", "Imperial Storm Cruiser");
             Add("ship.enemy_carrier", "제국 강습 항모", "Imperial Strike Carrier");
+            Add("ship.enemy_scout", "제국 정찰 프리깃", "Imperial Scout Frigate");
+            Add("ship.enemy_boarder", "제국 강습 바지선", "Imperial Boarding Barge");
+            Add("ship.enemy_monitor", "제국 방벽 감시함", "Imperial Bulwark Monitor");
+            Add("ui.intruders", "침입 {0}", "Boarders {0}");
             Add("ui.squadrons", "함재기 편대", "AIR WINGS");
             Add("ui.fire", "주포 발사", "Fire main battery");
             Add("ui.overcharge", "공명 과부하", "Resonance overcharge");
@@ -247,6 +251,9 @@ namespace AetherArk.Content
             Add("log.assault", "강습대가 적 {0}을 무력화합니다.", "Boarders sabotage enemy {0}.");
             Add("log.enemy_squadron_intercepted", "요격대가 적 공격편대를 격퇴했습니다.", "Interceptors broke the enemy strike.");
             Add("log.enemy_squadron_hit", "적 함재기가 비행갑판을 공습했습니다!", "Enemy aircraft struck the flight deck!");
+            Add("log.boarders", "적 강습대가 {0} 구획에 침입했습니다!", "Enemy boarders stormed the {0} compartment!");
+            Add("log.boarders_repelled", "요격대가 적 강습정을 격퇴했습니다.", "Interceptors drove off the boarding craft.");
+            Add("log.boarders_cleared", "{0} 구획의 침입자를 제압했습니다.", "Boarders in {0} have been put down.");
             Add("log.weather_thunder", "낙뢰가 결계와 구획을 강타했습니다.", "Lightning lashed the ward and compartments.");
             Add("log.weather_turbulence", "난기류로 승무원이 부상했습니다.", "A crew member was injured by turbulence.");
             Add("log.weather_aether", "에테르류가 결계를 채우고 코어를 불안정하게 합니다.", "The current feeds the ward and destabilizes the core.");
@@ -268,6 +275,7 @@ namespace AetherArk.Content
             Add("alert.squadron_recovered", "{0}: 착함 완료·재출격 가능", "{0}: recovered and ready");
             Add("alert.squadron_destroyed", "{0} 전멸 — 조종사 구조 필요!", "{0} destroyed — pilot rescue required!");
             Add("alert.enemy_airstrike", "적 공습이 비행갑판을 타격했습니다!", "Enemy strike hit the flight deck!");
+            Add("alert.boarders", "{0} 구획에 적 침입! 승무원을 보내 제압하십시오.", "Boarders in {0}! Send crew to repel them.");
             Add("alert.thunder_strike", "낙뢰가 결계와 함내 구획을 강타했습니다!", "Lightning struck the ward and compartments!");
             Add("alert.icing", "{0} 급속 결빙 — 동력과 수리 인원을 확인하십시오.", "Rapid icing in {0} — check power and repairs.");
             Add("alert.hull_breached", "{0} 피격 — 장갑 관통·선체 손상!", "Hit in {0} — armor breached, hull damaged!");

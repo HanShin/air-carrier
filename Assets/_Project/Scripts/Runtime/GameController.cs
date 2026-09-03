@@ -35,7 +35,7 @@ namespace AetherArk.Runtime
         }
 
         /// <summary>
-        /// Development-build shortcut: `-debug-combat [cutter|carrier|cruiser]` opens a paused battle (add `-debug-unpaused` to start it running, `-debug-damage` to pre-apply a hazard showcase)
+        /// Development-build shortcut: `-debug-combat [cutter|carrier|scout|boarder|cruiser|monitor]` opens a paused battle (add `-debug-unpaused` to start it running, `-debug-damage` to pre-apply a hazard showcase)
         /// against the requested enemy on a post-tutorial profile so the combat screen can be inspected
         /// without keyboard automation. Ignored in release builds.
         /// </summary>
@@ -79,7 +79,7 @@ namespace AetherArk.Runtime
             var index = Array.IndexOf(args, "-debug-combat");
             if (index < 0) return;
             var wanted = index + 1 < args.Length && !args[index + 1].StartsWith("-") ? args[index + 1].ToLowerInvariant() : "cutter";
-            var tier = wanted == "cruiser" ? 2 : 1;
+            var tier = wanted == "cruiser" || wanted == "monitor" ? 2 : 1;
             Profile.tutorialSeen = true;
             for (var seed = 1; seed < 4000; seed++)
             {

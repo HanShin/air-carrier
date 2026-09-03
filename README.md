@@ -14,11 +14,12 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - Route map drawn as a star map: circular nodes with encounter glyphs and a numbered badge on reachable nodes, a storm-front band over closed columns plus an amber warning band for the column that closes after the next jump, a legend, and a select-then-depart preview panel (aether cost vs stock, weather modifiers, recommended altitude, threat note). Number keys still jump immediately.
 - Runtime-built Korean/English UI with no scene assembly required.
 - Branching route map with storm closure, aether costs, weather, altitude recommendations, events, trading, rescue, and combat nodes.
-- Layered ward → armor → hull damage, ten ship compartments, fires, breaches, oxygen, repairs, crew injury, rescue windows, and captain-loss defeat.
+- Layered ward → armor → hull damage, ten ship compartments, fires, breaches, oxygen, repairs, crew injury, rescue windows, and captain-loss defeat. Any hit pauses a ship's ward regeneration for 3.5 s, so sustained fire wears a ward down instead of stalling against it.
 - Power allocation, resonator overcharge and instability accidents.
 - Free pause, adjustable combat speed, warning auto-pause, UI scaling, high contrast, reduced motion, and a rebindable pause key.
 - Two persistent air wings with intercept, bombard, escort, recon, and assault missions.
-- Three enemy silhouettes: the pursuit cutter, the storm cruiser, and the deck-heavy Imperial Strike Carrier, which replaces the cutter in 40% of regular battles from the second expedition onward and punishes launches unless interceptors or boarders are used. Enemy ship names are localized.
+- Six enemy silhouettes from a weighted, data-driven roster: pursuit cutter, strike carrier (deck 3), scout frigate (accurate and evasive), boarding barge (lands boarding parties that crew must repel), storm cruiser and bulwark monitor (ward 3, fast regen). Variants appear from the second expedition onward; the locked first expedition still meets only the cutter and cruiser. Enemy ship names are localized.
+- Boarding: intruders in a room injure crew and, if nobody is present, wreck the system; crew fight them off, marines fastest. Intercept charges repel boarding craft the way they break air strikes.
 - Low/mid/high altitude, six weather profiles, support ships, convoy population/morale, field repairs, and squadron refits.
 - Deterministic route/combat/event random streams and versioned atomic profile/run saves.
 - Last-resort aether and ordnance recovery so a depleted resource cannot silently soft-lock an expedition.
@@ -42,7 +43,7 @@ Keyboard access for the current slice:
 
 Emergency ordnance first consumes salvage, then supplies, then lives. It adds instability and costs morale, but guarantees that an empty magazine cannot permanently trap a run in combat.
 
-Development builds accept `-debug-combat [cutter|carrier|cruiser]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation. `-debug-route [jumps]` opens the route map after auto-resolving that many jumps so storm bands and visited nodes are visible.
+Development builds accept `-debug-combat [cutter|carrier|scout|boarder|cruiser|monitor]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation. `-debug-route [jumps]` opens the route map after auto-resolving that many jumps so storm bands and visited nodes are visible.
 
 Default pause is `Space`; it can be changed to `P` during expedition setup. Save files are written under `Application.persistentDataPath` as `profile.json` and `suspended_run.json`.
 
@@ -52,7 +53,7 @@ Default pause is `Space`; it can be changed to `P` during expedition setup. Save
 - Command-line Unity test: `Unity -batchmode -nographics -projectPath <repo> -runTests -testPlatform EditMode -testResults <results.xml>`.
 - macOS development build: execute `AetherArk.Editor.ProjectBuilder.BuildMac`; output is `Builds/AetherArk.app`.
 - Outside Unity: `python3 tools/validate_project.py` validates JSON, C# delimiter balance, localization coverage, and required assets.
-- With Mono installed: `bash tools/run_headless_audit.sh` compiles the real core C# sources and runs 100 seeded Standard/Story autoplayer campaigns plus the locked first expedition. Only the locked seed is treated as a first expedition, so the sweeps exercise the strike carrier.
+- With Mono installed: `bash tools/run_headless_audit.sh` compiles the real core C# sources and runs 100 seeded Standard/Story autoplayer campaigns plus the locked first expedition. Only the locked seed is treated as a first expedition, so the sweeps exercise the full roster. Add `--enemy=<id>` (for example `--enemy=enemy_monitor`) to force one silhouette into every battle; a battle that neither side can finish within the time cap is reported as a STALEMATE and exits with code 3.
 - `bash tools/compile_all_csharp.sh` compiles the complete runtime/UI source against compile-only Unity API stubs, catching C# and project-layer linkage errors before an editor import.
 
 The included EditMode tests cover deterministic generation, the full seven-jump route, power limits, layered damage, event costs, captain death, squadron launch, both emergency-resource fallbacks, difficulty modifiers, weather definitions, save round-trips, the strike carrier's power budget and air-strike behaviour, its exclusion from the locked first expedition, and enemy-name localization.

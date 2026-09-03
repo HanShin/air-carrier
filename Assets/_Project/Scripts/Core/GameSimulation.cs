@@ -274,9 +274,17 @@ namespace AetherArk.Core
             }
         }
 
+        public const float WardRechargeDelay = 3.5f;
+
         private void TickWard(ShipState ship, float dt)
         {
-            if (ship == null || ship.ward >= ship.maxWard) return;
+            if (ship == null) return;
+            if (ship.wardRechargeSeconds > 0f)
+            {
+                ship.wardRechargeSeconds = Math.Max(0f, ship.wardRechargeSeconds - dt);
+                return;
+            }
+            if (ship.ward >= ship.maxWard) return;
             var ward = ship.GetSystem(ShipSystemType.Ward);
             if (ward == null || ward.EffectivePower <= 0) return;
             var profile = ContentCatalog.GetWeather(State.currentWeather);
@@ -296,7 +304,40 @@ namespace AetherArk.Core
                 oxygenDelta -= room.fire * 0.025f;
                 room.oxygen = Clamp(room.oxygen + oxygenDelta * dt, 0f, 100f);
                 if (room.fire > 0f) room.fire = Math.Min(100f, room.fire + dt * 0.35f);
+                if (room.intruders > 0) TickIntruders(room, dt);
             }
+        }
+
+        private void TickIntruders(RoomState room, float dt)
+        {
+            var defenders = 0;
+            var marinePresent = false;
+            for (var i = 0; i < State.crew.Count; i++)
+            {
+                var crew = State.crew[i];
+                if (!crew.IsActive || crew.currentRoom != room.system) continue;
+                defenders++;
+                if (crew.role == CrewRole.Marine) marinePresent = true;
+            }
+
+            if (defenders > 0)
+            {
+                room.intruderProgress += dt * (0.35f * defenders + (marinePresent ? 0.6f : 0f));
+                while (room.intruderProgress >= 1f && room.intruders > 0)
+                {
+                    room.intruderProgress -= 1f;
+                    room.intruders--;
+                }
+                if (room.intruders <= 0)
+                {
+                    room.intruderProgress = 0f;
+                    AddLog("log.boarders_cleared", room.system.ToString());
+                }
+                return;
+            }
+
+            var system = State.playerShip.GetSystem(room.system);
+            if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + dt * room.intruders * 4f);
         }
 
         private void TickCrew(float dt)
@@ -440,7 +481,7 @@ namespace AetherArk.Core
                 return;
             }
 
-            State.enemyWeaponCooldown = State.isFinalBattle ? 3.8f : 5.2f;
+            State.enemyWeaponCooldown = State.isFinalBattle ? 3.2f : 4.3f;
             var random = State.random.combat;
             var targets = State.playerShip.systems;
             var target = targets[SeededRandom.Range(ref random, 0, targets.Count)].type;
@@ -453,7 +494,7 @@ namespace AetherArk.Core
             }
 
             var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.78f : State.difficulty == Difficulty.Harsh ? 1.22f : 1f;
-            ApplyDamage(State.playerShip, target, (2.2f + weapons.EffectivePower * 0.45f) * difficultyMultiplier, false);
+            ApplyDamage(State.playerShip, target, (2.6f + weapons.EffectivePower * 0.5f) * difficultyMultiplier, false);
             AddLog("log.enemy_hit", target.ToString());
         }
 
@@ -615,12 +656,28 @@ namespace AetherArk.Core
             if (State.interceptCharges > 0)
             {
                 State.interceptCharges--;
-                AddLog("log.enemy_squadron_intercepted");
+                AddLog(State.enemyShip.boardingCapable ? "log.boarders_repelled" : "log.enemy_squadron_intercepted");
+                return;
+            }
+            if (State.enemyShip.boardingCapable)
+            {
+                LandBoarders(2);
                 return;
             }
             ApplyDamage(State.playerShip, ShipSystemType.FlightDeck, 5f + deck.EffectivePower, false);
             AddLog("log.enemy_squadron_hit");
             RaiseCombatAlert("alert.enemy_airstrike", "", AlertSeverity.Warning, true);
+        }
+
+        private void LandBoarders(int count)
+        {
+            var random = State.random.combat;
+            var rooms = State.playerShip.rooms;
+            var room = rooms[SeededRandom.Range(ref random, 0, rooms.Count)];
+            State.random.combat = random;
+            room.intruders += count;
+            AddLog("log.boarders", room.system.ToString());
+            RaiseCombatAlert("alert.boarders", room.system.ToString(), AlertSeverity.Warning, true);
         }
 
         private void ResolveWeatherHazard()
@@ -679,6 +736,8 @@ namespace AetherArk.Core
         public void ApplyDamage(ShipState defender, ShipSystemType target, float amount, bool ignoresWard)
         {
             if (defender == null || amount <= 0f) return;
+            // Any hit interrupts ward regeneration so sustained fire can wear a ward down.
+            defender.wardRechargeSeconds = WardRechargeDelay;
             var remaining = amount;
             if (!ignoresWard && defender.ward > 0f)
             {

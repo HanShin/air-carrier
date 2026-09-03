@@ -396,6 +396,9 @@ namespace AetherArk.Tests
         [TestCase("ship.enemy_cutter")]
         [TestCase("ship.enemy_cruiser")]
         [TestCase("ship.enemy_carrier")]
+        [TestCase("ship.enemy_scout")]
+        [TestCase("ship.enemy_boarder")]
+        [TestCase("ship.enemy_monitor")]
         public void EnemyShipNames_AreLocalizedInBothLanguages(string key)
         {
             Assert.That(new LocalizationService(Language.Korean).T(key), Is.Not.EqualTo(key));
@@ -407,13 +410,13 @@ namespace AetherArk.Tests
         [TestCase("enemy_cutter")]
         [TestCase("enemy_cruiser")]
         [TestCase("enemy_carrier")]
+        [TestCase("enemy_scout")]
+        [TestCase("enemy_boarder")]
+        [TestCase("enemy_monitor")]
         public void DeckPlan_CoversEverySystemWithoutOverlapInsideGrid(string shipId)
         {
             var random = 7u;
-            var ship = shipId == "ship_vanguard" ? ContentCatalog.CreateVanguard()
-                : shipId == "enemy_cruiser" ? ContentCatalog.CreateEnemy(2, false, ref random)
-                : shipId == "enemy_cutter" ? ContentCatalog.CreateEnemy(1, false, ref random)
-                : FindCarrier();
+            var ship = shipId == "ship_vanguard" ? ContentCatalog.CreateVanguard() : ContentCatalog.CreateEnemyById(shipId, ref random);
             Assert.That(ship.id, Is.EqualTo(shipId));
             var plan = ContentCatalog.GetDeckPlan(ship.id);
             Assert.That(plan, Is.Not.Null);
@@ -549,6 +552,133 @@ namespace AetherArk.Tests
                 if (type != EncounterType.EliteBattle) Assert.That(glyphs.Add(glyph), Is.True, type + " shares a glyph");
             }
             Assert.That(RouteRules.Glyph(EncounterType.EliteBattle), Is.EqualTo(RouteRules.Glyph(EncounterType.Battle)));
+        }
+
+        [TestCase("enemy_scout", 1)]
+        [TestCase("enemy_boarder", 1)]
+        [TestCase("enemy_monitor", 2)]
+        public void EnemyRoster_NewSilhouettesSpawnOnTheirTierWhenVariantsAreAllowed(string shipId, int tier)
+        {
+            var found = false;
+            for (var seed = 1u; seed < 600u && !found; seed++)
+            {
+                var random = seed;
+                found = ContentCatalog.CreateEnemy(tier, true, ref random).id == shipId;
+            }
+            Assert.That(found, Is.True, shipId + " never spawned on tier " + tier);
+        }
+
+        [Test]
+        public void EnemyRoster_EveryShipRespectsItsPowerBudget()
+        {
+            foreach (var id in new[] { "enemy_cutter", "enemy_carrier", "enemy_scout", "enemy_boarder", "enemy_cruiser", "enemy_monitor" })
+            {
+                var random = 3u;
+                var ship = ContentCatalog.CreateEnemyById(id, ref random);
+                Assert.That(ship, Is.Not.Null, id);
+                Assert.That(ship.AllocatedPower(), Is.LessThanOrEqualTo(ship.coreOutput), id + " over-allocates power");
+                Assert.That(ship.systems.Count, Is.EqualTo(10), id + " must carry all ten systems");
+            }
+            var boarder = ContentCatalog.CreateEnemyById("enemy_boarder", ref Unused);
+            Assert.That(boarder.boardingCapable, Is.True);
+            Assert.That(ContentCatalog.CreateEnemyById("enemy_carrier", ref Unused).boardingCapable, Is.False);
+        }
+
+        private static uint Unused = 1u;
+
+        private static GameSimulation RunAgainst(string shipId)
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 11);
+            simulation.BeginCombat(shipId == "enemy_monitor" || shipId == "enemy_cruiser" ? 2 : 1, false);
+            var random = simulation.State.random.combat;
+            simulation.State.enemyShip = ContentCatalog.CreateEnemyById(shipId, ref random);
+            simulation.State.random.combat = random;
+            return simulation;
+        }
+
+        private static void IsolateFromOtherThreats(RunState state)
+        {
+            state.enemyShip.GetSystem(ShipSystemType.Weapons).power = 0;
+            state.currentWeather = WeatherType.Clear;
+            state.weatherHazardTimer = 999f;
+        }
+
+        [Test]
+        public void BoardingBarge_LandsBoardersUnlessInterceptorsAreReady()
+        {
+            var simulation = RunAgainst("enemy_boarder");
+            var state = simulation.State;
+            IsolateFromOtherThreats(state);
+            state.interceptCharges = 1;
+            simulation.SetPaused(false);
+
+            for (var i = 0; i < 106; i++) simulation.Tick(0.1f);
+            Assert.That(state.interceptCharges, Is.EqualTo(0));
+            Assert.That(state.playerShip.rooms.Exists(room => room.intruders > 0), Is.False, "interceptors should repel the first boarding party");
+
+            for (var i = 0; i < 160; i++) simulation.Tick(0.1f);
+            Assert.That(state.playerShip.rooms.Exists(room => room.intruders > 0), Is.True, "the second boarding party should land");
+            Assert.That(state.combatLog.Exists(entry => entry.key == "log.boarders"), Is.True);
+        }
+
+        [Test]
+        public void Boarders_AreClearedByCrewButWreckAnUnattendedRoom()
+        {
+            var simulation = RunAgainst("enemy_boarder");
+            var state = simulation.State;
+            IsolateFromOtherThreats(state);
+            state.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 0; // no further parties
+            var marine = state.crew.Find(crew => crew.role == CrewRole.Marine);
+            simulation.MoveCrew(marine.id, ShipSystemType.Weapons);
+            foreach (var crew in state.crew) if (crew.id != marine.id) crew.currentRoom = ShipSystemType.Bridge;
+
+            state.playerShip.GetRoom(ShipSystemType.Weapons).intruders = 2;
+            state.playerShip.GetRoom(ShipSystemType.Sensors).intruders = 2;
+            var sensorsBefore = state.playerShip.GetSystem(ShipSystemType.Sensors).damage;
+            simulation.SetPaused(false);
+            for (var i = 0; i < 60; i++) simulation.Tick(0.1f);
+
+            Assert.That(state.playerShip.GetRoom(ShipSystemType.Weapons).intruders, Is.EqualTo(0f).Within(0.001f), "a marine should clear two boarders within six seconds");
+            Assert.That(state.playerShip.GetRoom(ShipSystemType.Sensors).intruders, Is.GreaterThan(0f), "nobody is fighting the boarders in Sensors");
+            Assert.That(state.playerShip.GetSystem(ShipSystemType.Sensors).damage, Is.GreaterThan(sensorsBefore), "unattended boarders should wreck the system");
+        }
+
+        [Test]
+        public void Ward_PausesRegenerationRightAfterBeingHit()
+        {
+            var simulation = RunAgainst("enemy_cutter");
+            var state = simulation.State;
+            IsolateFromOtherThreats(state);
+            state.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 0;
+            var ship = state.playerShip;
+            ship.ward = ship.maxWard;
+            simulation.SetPaused(false);
+
+            simulation.ApplyDamage(ship, ShipSystemType.Weapons, 4f, false);
+            var afterHit = ship.ward;
+            for (var i = 0; i < 20; i++) simulation.Tick(0.1f); // 2 s: inside the recharge delay
+            Assert.That(ship.ward, Is.EqualTo(afterHit).Within(0.001f), "ward must not regenerate during the recharge delay");
+
+            for (var i = 0; i < 40; i++) simulation.Tick(0.1f); // 6 s total: delay has expired
+            Assert.That(ship.ward, Is.GreaterThan(afterHit), "ward should regenerate once the delay expires");
+        }
+
+        [Test]
+        public void Ward_RechargeDelayAppliesToTheEnemyToo()
+        {
+            var simulation = RunAgainst("enemy_monitor");
+            var state = simulation.State;
+            IsolateFromOtherThreats(state);
+            var enemy = state.enemyShip;
+            enemy.ward = enemy.maxWard;
+            simulation.SetPaused(false);
+
+            simulation.ApplyDamage(enemy, ShipSystemType.Ward, 5f, false);
+            var afterHit = enemy.ward;
+            for (var i = 0; i < 20; i++) simulation.Tick(0.1f);
+            Assert.That(enemy.ward, Is.EqualTo(afterHit).Within(0.001f));
         }
 
         [TestCase(WeatherType.Thunderhead, -0.08f)]

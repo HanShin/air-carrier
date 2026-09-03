@@ -16,15 +16,29 @@ internal static class HeadlessPlaythrough
         public float ActiveCombatSeconds;
         public int Survivors;
         public int Morale;
+        public bool Stalemate;
+        public string StalemateEnemy;
     }
+
+    private static string forcedEnemy;
 
     private static int Main(string[] args)
     {
         var runCount = args.Length > 0 ? int.Parse(args[0]) : 100;
         var difficulty = args.Length > 1 ? (Difficulty)Enum.Parse(typeof(Difficulty), args[1], true) : Difficulty.Standard;
         var baseSeed = args.Length > 2 ? int.Parse(args[2]) : 17000;
+        foreach (var arg in args)
+            if (arg.StartsWith("--enemy=", StringComparison.Ordinal)) forcedEnemy = arg.Substring("--enemy=".Length);
         var results = new List<Result>();
         for (var i = 0; i < runCount; i++) results.Add(Play(baseSeed + i * 7919, difficulty));
+
+        var stalemates = results.FindAll(result => result.Stalemate);
+        if (stalemates.Count > 0)
+        {
+            Console.Error.WriteLine($"STALEMATE in {stalemates.Count} run(s): a battle neither side could finish within the combat time cap.");
+            foreach (var result in stalemates) Console.Error.WriteLine($"  seed={result.Seed} enemy={result.StalemateEnemy} battles={result.Battles}");
+            return 3;
+        }
 
         var victories = results.FindAll(result => result.Victory);
         if (victories.Count == 0)
@@ -49,6 +63,7 @@ internal static class HeadlessPlaythrough
 
         Console.WriteLine("Headless first-run audit");
         Console.WriteLine($"Difficulty: {difficulty}");
+        if (forcedEnemy != null) Console.WriteLine($"Forced enemy: {forcedEnemy}");
         Console.WriteLine($"Runs: {results.Count}");
         Console.WriteLine($"Victories: {victories.Count} ({victories.Count * 100f / results.Count:0.0}%)");
         Console.WriteLine($"Seven-jump completions: {victories.FindAll(result => result.Jumps == 7).Count}/{victories.Count}");
@@ -94,10 +109,19 @@ internal static class HeadlessPlaythrough
                     break;
                 case GamePhase.Combat:
                     result.Battles++;
+                    if (forcedEnemy != null && simulation.State.combatElapsed <= 0f) ForceEnemy(simulation);
                     result.ActiveCombatSeconds += ResolveCombat(simulation);
+                    if (simulation.State.phase == GamePhase.Combat)
+                    {
+                        // The time cap expired with both ships alive: a stalemate is a design defect, not a loss.
+                        result.Stalemate = true;
+                        result.StalemateEnemy = simulation.State.enemyShip?.id;
+                        goto done;
+                    }
                     break;
             }
         }
+        done:
 
         result.Victory = simulation.State.phase == GamePhase.Victory;
         result.Defeat = simulation.State.defeatReason;
@@ -105,6 +129,21 @@ internal static class HeadlessPlaythrough
         result.Survivors = simulation.State.convoy.survivors;
         result.Morale = simulation.State.convoy.morale;
         return result;
+    }
+
+    private static void ForceEnemy(GameSimulation simulation)
+    {
+        var random = simulation.State.random.combat;
+        var replacement = ContentCatalog.CreateEnemyById(forcedEnemy, ref random);
+        if (replacement == null) throw new ArgumentException("Unknown enemy id: " + forcedEnemy);
+        simulation.State.random.combat = random;
+        if (simulation.State.isFinalBattle)
+        {
+            replacement.maxHull += 10f; replacement.hull += 10f;
+            replacement.maxArmor += 6f; replacement.armor += 6f;
+            replacement.maxWard += 4f; replacement.ward += 4f;
+        }
+        simulation.State.enemyShip = replacement;
     }
 
     private static void ResolveMap(GameSimulation simulation)

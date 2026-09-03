@@ -91,6 +91,7 @@ namespace AetherArk.Core
         public float breach;
         public float oxygen = 100f;
         public int intruders;
+        public float intruderProgress;
     }
 
     [Serializable]
@@ -99,6 +100,7 @@ namespace AetherArk.Core
         public string id;
         public string displayName;
         public string nameKey;
+        public bool boardingCapable;
         public float hull;
         public float maxHull;
         public float armor;
@@ -107,6 +109,7 @@ namespace AetherArk.Core
         public float maxWard;
         public int coreOutput;
         public float instability;
+        public float wardRechargeSeconds;
         public AltitudeBand altitude = AltitudeBand.Medium;
         public List<ShipSystemState> systems = new List<ShipSystemState>();
         public List<RoomState> rooms = new List<RoomState>();

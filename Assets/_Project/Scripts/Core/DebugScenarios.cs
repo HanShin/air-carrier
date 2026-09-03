@@ -24,6 +24,9 @@ namespace AetherArk.Core
             var enginesRoom = ship.GetRoom(ShipSystemType.Engines);
             if (enginesRoom != null) enginesRoom.breach = 35f;
 
+            var bridgeRoom = ship.GetRoom(ShipSystemType.Bridge);
+            if (bridgeRoom != null) bridgeRoom.intruders = 2;
+
             var lifeRoom = ship.GetRoom(ShipSystemType.LifeSupport);
             if (lifeRoom != null) lifeRoom.oxygen = 18f;
 

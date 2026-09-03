@@ -160,6 +160,14 @@ namespace AetherArk.Runtime
                 }
             }
 
+            if (room != null && room.intruders > 0)
+            {
+                ui.Outline("Intruders_" + system.type, container, position, size, options.highContrast ? 4f : 3f, UiFactory.Danger);
+                var intruderY = position.y + 12f + (room.fire > 1f ? 16f : 0f) + (room.breach > 1f ? 16f : 0f);
+                ui.Text("IntruderLabel_" + system.type, container, l10n.T("ui.intruders", room.intruders.ToString()), 12, UiFactory.Danger, TextAnchor.LowerRight,
+                    new Vector2(position.x, intruderY), new Vector2(size.x - 6f, 18f), FontStyle.Bold);
+            }
+
             if (options.selectedSystem.HasValue && options.selectedSystem.Value == system.type)
                 ui.Outline("Selected_" + system.type, container, position, size, options.highContrast ? 4f : 3f, UiFactory.Brass);
 

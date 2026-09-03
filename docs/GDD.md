@@ -24,6 +24,8 @@ If the magazine reaches zero during combat, emergency assembly converts three po
 | Cost | Normal | Normal | Altitude-change recovery and instability |
 | Risk | Terrain is represented through events | No special penalty | Larger relative-altitude accuracy gaps |
 
+Wards regenerate only while a ship has not been hit for 3.5 seconds; the delay keeps wards as burst absorbers rather than sustained walls, which is what makes heavily warded silhouettes such as the bulwark monitor beatable by steady fire.
+
 Weather profiles are clear, thunderhead, turbulence, aether current, icing, and cloud cover. Each owns an accuracy modifier, ward modifier, sortie-time modifier, and hazard interval. The route previews weather and recommended altitude before travel.
 
 ## Production contracts
@@ -36,7 +38,7 @@ Profile and suspended run saves are separate, schema-versioned JSON files writte
 
 | Milestone | Flagships | Lineages | Regions | Events | Enemy silhouettes/configs |
 |---|---:|---:|---:|---:|---:|
-| Vertical slice | 1 | 6 represented | 1 short route | 5 authored sets | 3 / 3 |
+| Vertical slice | 1 | 6 represented | 1 short route | 5 authored sets | 6 / 7 |
 | Early Access | 1 | 4 fully authored | 4 | ~50 | 6 / ~15 |
 | 1.0 | 3 | 6 | 6 + finale | 100+ | 12 / ~30 |
 

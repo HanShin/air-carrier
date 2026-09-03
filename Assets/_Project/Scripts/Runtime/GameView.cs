@@ -737,9 +737,10 @@ namespace AetherArk.Runtime
             {
                 if (room.fire > 1f) hazards.Append("▲ ").Append(l10n.T("ui.fire_short")).Append(' ').Append(room.fire.ToString("0")).Append("   ");
                 if (room.breach > 1f) hazards.Append("◇ ").Append(l10n.T("ui.breach_short")).Append(' ').Append(room.breach.ToString("0")).Append("   ");
+                if (room.intruders > 0) hazards.Append("■ ").Append(l10n.T("ui.intruders", room.intruders.ToString())).Append("   ");
                 hazards.Append("O₂ ").Append(room.oxygen.ToString("0")).Append('%');
             }
-            var hazardous = room != null && (room.fire > 10f || room.breach > 10f || room.oxygen < 30f);
+            var hazardous = room != null && (room.fire > 10f || room.breach > 10f || room.oxygen < 30f || room.intruders > 0);
             ui.Text(id + "Hazards", strip, hazards.ToString(), 12, hazardous ? UiFactory.Danger : UiFactory.TextMuted, TextAnchor.MiddleLeft,
                 new Vector2(12f, 6f), new Vector2(300f, 24f), hazardous ? FontStyle.Bold : FontStyle.Normal);
 

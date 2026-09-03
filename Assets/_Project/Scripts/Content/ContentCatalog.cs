@@ -37,35 +37,126 @@ namespace AetherArk.Content
             return ship;
         }
 
+        private sealed class EnemyDefinition
+        {
+            public string id;
+            public string displayName;
+            public int tier;
+            public int weight;
+            public float hull, armor, ward;
+            public int coreOutput;
+            public bool boarding;
+            // Power per system in enum order: Bridge, AetherCore, LiftArray, Engines, Ward, Weapons, FlightDeck, Sensors, Infirmary, LifeSupport.
+            public int[] power;
+            public int[] maxPower;
+        }
+
+        private static readonly EnemyDefinition[] EnemyRoster =
+        {
+            new EnemyDefinition
+            {
+                id = "enemy_cutter", displayName = "Imperial Pursuit Cutter", tier = 1, weight = 40,
+                hull = 24f, armor = 10f, ward = 8f, coreOutput = 8,
+                power = new[] { 1, 0, 1, 2, 1, 2, 0, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
+            },
+            new EnemyDefinition
+            {
+                id = "enemy_carrier", displayName = "Imperial Strike Carrier", tier = 1, weight = 20,
+                hull = 28f, armor = 12f, ward = 10f, coreOutput = 10,
+                power = new[] { 1, 0, 1, 1, 1, 1, 3, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 3, 4, 2, 1, 2 }
+            },
+            new EnemyDefinition
+            {
+                id = "enemy_scout", displayName = "Imperial Scout Frigate", tier = 1, weight = 20,
+                hull = 20f, armor = 8f, ward = 8f, coreOutput = 10,
+                power = new[] { 1, 0, 1, 3, 1, 1, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 1, 3, 1, 2 }
+            },
+            new EnemyDefinition
+            {
+                id = "enemy_boarder", displayName = "Imperial Boarding Barge", tier = 1, weight = 20, boarding = true,
+                hull = 26f, armor = 12f, ward = 6f, coreOutput = 9,
+                power = new[] { 1, 0, 1, 1, 1, 1, 2, 0, 1, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 3, 3, 2, 1, 2 }
+            },
+            new EnemyDefinition
+            {
+                id = "enemy_cruiser", displayName = "Imperial Storm Cruiser", tier = 2, weight = 60,
+                hull = 34f, armor = 18f, ward = 12f, coreOutput = 11,
+                power = new[] { 1, 0, 1, 2, 2, 3, 1, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
+            },
+            new EnemyDefinition
+            {
+                id = "enemy_monitor", displayName = "Imperial Bulwark Monitor", tier = 2, weight = 40,
+                hull = 30f, armor = 22f, ward = 16f, coreOutput = 11,
+                power = new[] { 1, 0, 1, 1, 3, 2, 0, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 4, 4, 1, 2, 1, 2 }
+            }
+        };
+
+        private static readonly ShipSystemType[] SystemOrder =
+        {
+            ShipSystemType.Bridge, ShipSystemType.AetherCore, ShipSystemType.LiftArray, ShipSystemType.Engines, ShipSystemType.Ward,
+            ShipSystemType.Weapons, ShipSystemType.FlightDeck, ShipSystemType.Sensors, ShipSystemType.Infirmary, ShipSystemType.LifeSupport
+        };
+
+        private static readonly string[] SystemKeys =
+        {
+            "system.bridge", "system.core", "system.lift", "system.engines", "system.ward",
+            "system.weapons", "system.deck", "system.sensors", "system.infirmary", "system.life"
+        };
+
+        /// <summary>
+        /// Picks an enemy for the battle tier. Without variants only the baseline cutter/cruiser can appear,
+        /// which keeps the locked first expedition byte-for-byte reproducible.
+        /// </summary>
         public static ShipState CreateEnemy(int tier, bool allowVariants, ref uint random)
         {
-            var elite = tier >= 2;
-            var carrier = !elite && allowVariants && SeededRandom.Chance(ref random, 0.4f);
+            var effectiveTier = tier >= 2 ? 2 : 1;
+            var chosen = effectiveTier == 2 ? EnemyRoster[4] : EnemyRoster[0];
+            if (allowVariants)
+            {
+                var total = 0;
+                for (var i = 0; i < EnemyRoster.Length; i++) if (EnemyRoster[i].tier == effectiveTier) total += EnemyRoster[i].weight;
+                var roll = SeededRandom.Range(ref random, 0, total);
+                for (var i = 0; i < EnemyRoster.Length; i++)
+                {
+                    if (EnemyRoster[i].tier != effectiveTier) continue;
+                    if (roll < EnemyRoster[i].weight) { chosen = EnemyRoster[i]; break; }
+                    roll -= EnemyRoster[i].weight;
+                }
+            }
+            return Build(chosen, ref random);
+        }
+
+        public static ShipState CreateEnemyById(string id, ref uint random)
+        {
+            for (var i = 0; i < EnemyRoster.Length; i++)
+                if (EnemyRoster[i].id == id) return Build(EnemyRoster[i], ref random);
+            return null;
+        }
+
+        public static IEnumerable<string> EnemyIds()
+        {
+            for (var i = 0; i < EnemyRoster.Length; i++) yield return EnemyRoster[i].id;
+        }
+
+        private static ShipState Build(EnemyDefinition definition, ref uint random)
+        {
             var ship = new ShipState
             {
-                id = elite ? "enemy_cruiser" : carrier ? "enemy_carrier" : "enemy_cutter",
-                displayName = elite ? "Imperial Storm Cruiser" : carrier ? "Imperial Strike Carrier" : "Imperial Pursuit Cutter",
-                nameKey = elite ? "ship.enemy_cruiser" : carrier ? "ship.enemy_carrier" : "ship.enemy_cutter",
-                hull = elite ? 34f : carrier ? 28f : 24f,
-                maxHull = elite ? 34f : carrier ? 28f : 24f,
-                armor = elite ? 18f : carrier ? 12f : 10f,
-                maxArmor = elite ? 18f : carrier ? 12f : 10f,
-                ward = elite ? 12f : carrier ? 10f : 8f,
-                maxWard = elite ? 12f : carrier ? 10f : 8f,
-                coreOutput = elite ? 11 : carrier ? 10 : 8,
+                id = definition.id,
+                displayName = definition.displayName,
+                nameKey = "ship." + definition.id,
+                hull = definition.hull,
+                maxHull = definition.hull,
+                armor = definition.armor,
+                maxArmor = definition.armor,
+                ward = definition.ward,
+                maxWard = definition.ward,
+                coreOutput = definition.coreOutput,
+                boardingCapable = definition.boarding,
                 altitude = (AltitudeBand)SeededRandom.Range(ref random, 0, 3)
             };
-
-            AddSystem(ship, ShipSystemType.Bridge, "system.bridge", 1, 2);
-            AddSystem(ship, ShipSystemType.AetherCore, "system.core", 0, 0);
-            AddSystem(ship, ShipSystemType.LiftArray, "system.lift", 1, 3);
-            AddSystem(ship, ShipSystemType.Engines, "system.engines", carrier ? 1 : 2, 3);
-            AddSystem(ship, ShipSystemType.Ward, "system.ward", elite ? 2 : 1, 3);
-            AddSystem(ship, ShipSystemType.Weapons, "system.weapons", elite ? 3 : carrier ? 1 : 2, carrier ? 3 : 4);
-            AddSystem(ship, ShipSystemType.FlightDeck, "system.deck", elite ? 1 : carrier ? 3 : 0, carrier ? 4 : 2);
-            AddSystem(ship, ShipSystemType.Sensors, "system.sensors", carrier ? 1 : 0, 2);
-            AddSystem(ship, ShipSystemType.Infirmary, "system.infirmary", 0, 1);
-            AddSystem(ship, ShipSystemType.LifeSupport, "system.life", 1, 2);
+            for (var i = 0; i < SystemOrder.Length; i++)
+                AddSystem(ship, SystemOrder[i], SystemKeys[i], definition.power[i], definition.maxPower[i]);
             return ship;
         }
 
@@ -127,6 +218,41 @@ namespace AetherArk.Content
                 Tile(ShipSystemType.LifeSupport, 0, 2),
                 Tile(ShipSystemType.Infirmary, 1, 2),
                 Tile(ShipSystemType.Ward, 2, 2, 2, 1));
+            plans["enemy_scout"] = Plan("enemy_scout", 6, 2,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 2),
+                Tile(ShipSystemType.AetherCore, 1, 0),
+                Tile(ShipSystemType.LiftArray, 1, 1),
+                Tile(ShipSystemType.Sensors, 2, 0, 2, 1),
+                Tile(ShipSystemType.Ward, 2, 1),
+                Tile(ShipSystemType.Weapons, 3, 1),
+                Tile(ShipSystemType.Bridge, 4, 0),
+                Tile(ShipSystemType.FlightDeck, 4, 1),
+                Tile(ShipSystemType.LifeSupport, 5, 0),
+                Tile(ShipSystemType.Infirmary, 5, 1));
+
+            plans["enemy_boarder"] = Plan("enemy_boarder", 7, 2,
+                Tile(ShipSystemType.Engines, 0, 0),
+                Tile(ShipSystemType.LifeSupport, 0, 1),
+                Tile(ShipSystemType.AetherCore, 1, 0),
+                Tile(ShipSystemType.LiftArray, 1, 1),
+                Tile(ShipSystemType.FlightDeck, 2, 0, 2, 2),
+                Tile(ShipSystemType.Infirmary, 4, 0),
+                Tile(ShipSystemType.Weapons, 4, 1),
+                Tile(ShipSystemType.Bridge, 5, 0),
+                Tile(ShipSystemType.Sensors, 5, 1),
+                Tile(ShipSystemType.Ward, 6, 0, 1, 2));
+
+            plans["enemy_monitor"] = Plan("enemy_monitor", 6, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 2),
+                Tile(ShipSystemType.LifeSupport, 0, 2),
+                Tile(ShipSystemType.LiftArray, 1, 0),
+                Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.Infirmary, 1, 2),
+                Tile(ShipSystemType.Ward, 2, 0, 2, 2),
+                Tile(ShipSystemType.FlightDeck, 2, 2),
+                Tile(ShipSystemType.Sensors, 3, 2),
+                Tile(ShipSystemType.Weapons, 4, 0, 1, 3),
+                Tile(ShipSystemType.Bridge, 5, 0, 1, 2));
             return plans;
         }
 
