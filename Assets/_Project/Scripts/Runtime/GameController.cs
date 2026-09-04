@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AetherArk.Content;
 using AetherArk.Core;
 using UnityEngine;
@@ -12,7 +13,7 @@ namespace AetherArk.Runtime
         public ProfileState Profile { get; private set; }
         public GameSimulation Simulation { get; private set; }
         public LocalizationService L10n { get; private set; }
-        public Texture2D Background { get; private set; }
+        public Texture2D Background => ResolveBackground();
         public FrontendScreen Screen { get; private set; }
         public string LastCommandMessage { get; private set; }
 
@@ -21,17 +22,37 @@ namespace AetherArk.Runtime
         private GameView view;
         private GamePhase previousPhase;
         private float refreshTimer;
+        private readonly Dictionary<string, Texture2D> backgroundCache = new Dictionary<string, Texture2D>();
 
         private void Awake()
         {
             saves = new SaveService();
             Profile = saves.LoadProfile();
             L10n = new LocalizationService(Profile.language);
-            Background = Resources.Load<Texture2D>("Art/sky_storm_background");
+            LoadBackground(BackgroundArt.FallbackPath);
             ui = new UiFactory(Profile.accessibility.uiScale);
             view = new GameView(this, ui);
             ShowMenu();
             TryDebugCombatLaunch();
+        }
+
+        private Texture2D ResolveBackground()
+        {
+            var path = Simulation == null
+                ? BackgroundArt.FallbackPath
+                : BackgroundArt.ResourcePath(Simulation.State.regionIndex, Simulation.State.isFinalBattle);
+            var texture = LoadBackground(path);
+            return texture != null ? texture : LoadBackground(BackgroundArt.FallbackPath);
+        }
+
+        private Texture2D LoadBackground(string path)
+        {
+            if (!backgroundCache.TryGetValue(path, out var texture))
+            {
+                texture = Resources.Load<Texture2D>(path);
+                backgroundCache[path] = texture;
+            }
+            return texture;
         }
 
         /// <summary>

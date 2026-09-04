@@ -166,6 +166,27 @@ namespace AetherArk.Tests
             controller.AbandonRun();
         }
 
+        [UnityTest]
+        public IEnumerator CampaignBackground_TracksRegionAndFinalBattleState()
+        {
+            yield return null;
+            var controller = Object.FindFirstObjectByType<GameController>();
+            controller.StartRun();
+            var state = controller.Simulation.State;
+
+            state.regionIndex = 1;
+            state.isFinalBattle = false;
+            Assert.That(controller.Background.name, Is.EqualTo("dawn_archipelago"));
+
+            state.regionIndex = 5;
+            Assert.That(controller.Background.name, Is.EqualTo("abyssal_strait"));
+
+            state.isFinalBattle = true;
+            Assert.That(controller.Background.name, Is.EqualTo("throne_gate_finale"));
+
+            controller.AbandonRun();
+        }
+
         private static void ActivateButton(string objectName)
         {
             var target = GameObject.Find(objectName);

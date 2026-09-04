@@ -49,7 +49,7 @@ namespace AetherArk.Runtime
                 new Vector2(60f, 114f), new Vector2(400f, 62f));
             ui.Button("Quit", panel, l10n.T("menu.quit"), controller.Quit,
                 new Vector2(60f, 32f), new Vector2(400f, 62f), new Color(0.22f, 0.13f, 0.16f, 0.95f));
-            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.7 · EQUIPMENT ICONS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
+            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.8 · REGION BACKGROUNDS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
                 new Vector2(1500f, 28f), new Vector2(360f, 30f));
         }
 

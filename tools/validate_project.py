@@ -94,7 +94,19 @@ def validate_assets() -> None:
         missing_icons = sorted(expected - present_icons)
         if missing_icons:
             fail(f"missing {folder.lower()} icons: " + ", ".join(missing_icons))
-    print(f"OK: required scene, settings, background, {len(expected_silhouettes)} ship silhouettes, and 20 equipment icons")
+    expected_backgrounds = {
+        "dawn_archipelago", "storm_corridor", "icefield_heights", "imperial_cordon",
+        "abyssal_strait", "sky_throne", "throne_gate_finale",
+    }
+    background_folder = ROOT / "Assets/_Project/Resources/Art/Backgrounds"
+    present_backgrounds = {path.stem for path in background_folder.glob("*.png") if path.stat().st_size > 0}
+    missing_backgrounds = sorted(expected_backgrounds - present_backgrounds)
+    if missing_backgrounds:
+        fail("missing campaign backgrounds: " + ", ".join(missing_backgrounds))
+    print(
+        f"OK: required scene, settings, fallback background, {len(expected_backgrounds)} campaign backgrounds, "
+        f"{len(expected_silhouettes)} ship silhouettes, and 20 equipment icons"
+    )
 
 
 def main() -> None:
