@@ -36,6 +36,7 @@ internal static class HeadlessPlaythrough
 
     private static string forcedEnemy;
     private static string strategy = "standard";
+    private static string flagship;
     private static bool report;
 
     private static int Main(string[] args)
@@ -48,6 +49,7 @@ internal static class HeadlessPlaythrough
             if (arg.StartsWith("--enemy=", StringComparison.Ordinal)) forcedEnemy = arg.Substring("--enemy=".Length);
             if (arg.StartsWith("--strategy=", StringComparison.Ordinal)) strategy = arg.Substring("--strategy=".Length).ToLowerInvariant();
             if (arg == "--report") report = true;
+            if (arg.StartsWith("--flagship=", StringComparison.Ordinal)) flagship = arg.Substring("--flagship=".Length);
         }
         var results = new List<Result>();
         for (var i = 0; i < runCount; i++) results.Add(Play(baseSeed + i * 7919, difficulty));
@@ -89,6 +91,7 @@ internal static class HeadlessPlaythrough
         Console.WriteLine("Headless first-run audit");
         Console.WriteLine($"Difficulty: {difficulty}");
         if (forcedEnemy != null) Console.WriteLine($"Forced enemy: {forcedEnemy}");
+        if (flagship != null) Console.WriteLine($"Flagship: {flagship}");
         Console.WriteLine($"Runs: {results.Count}");
         Console.WriteLine($"Victories: {victories.Count} ({victories.Count * 100f / results.Count:0.0}%)");
         Console.WriteLine($"Full-length completions (7 jumps x regions): {victories.FindAll(result => result.Jumps == 7 * result.Regions).Count}/{victories.Count}");
@@ -187,7 +190,9 @@ internal static class HeadlessPlaythrough
             captainLineage = CrewLineage.Human,
             difficulty = difficulty,
             supportShip = SupportShipType.Workshop,
-            tutorialSeen = seed != GameSimulation.FirstExpeditionSeed
+            tutorialSeen = seed != GameSimulation.FirstExpeditionSeed,
+            campaignVictories = flagship != null ? 1 : 0,
+            flagshipId = flagship ?? "ship_vanguard"
         };
         var simulation = GameSimulation.NewRun(profile, seed);
         var result = new Result { Seed = seed };
@@ -400,8 +405,8 @@ internal static class HeadlessPlaythrough
         // Route spare core output into the weapons room so every mounted weapon can be powered.
         var ship = simulation.State.playerShip;
         var weaponsSystem = ship.GetSystem(ShipSystemType.Weapons);
-        while (weaponsSystem != null && weaponsSystem.power < weaponsSystem.maxPower && ship.AllocatedPower() < ship.coreOutput
-               && !simulation.IsWeaponPowered(simulation.State.weaponSlots.Count - 1))
+        // Spare power beyond the mounted weapons still shortens every reload, so route all of it.
+        while (weaponsSystem != null && weaponsSystem.power < weaponsSystem.maxPower && ship.AllocatedPower() < ship.coreOutput)
             simulation.ChangePower(ShipSystemType.Weapons, 1);
 
         while (simulation.State.phase == GamePhase.Combat && elapsed < 420f)
@@ -409,6 +414,7 @@ internal static class HeadlessPlaythrough
             simulation.FireAllReady(ShipSystemType.Weapons);
 
             var cautious = strategy == "cautious";
+            // One sortie per wing per battle: relaunching every time bleeds strength, pilots and ordnance.
             var bomber = simulation.State.squadrons.Find(squadron => squadron.type == SquadronType.Bomber);
             if (!cautious && !launchedBomber && bomber != null && bomber.CanLaunch && simulation.State.resources.ordnance >= bomber.ordnanceCost)
             {

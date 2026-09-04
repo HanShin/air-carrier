@@ -23,9 +23,9 @@ namespace AetherArk.Core
                 regionCount = profile.tutorialSeen ? ContentCatalog.RegionCount : 1,
                 difficulty = profile.difficulty,
                 autoPauseOnWarning = profile.accessibility.autoPauseOnWarning,
-                playerShip = ContentCatalog.CreateVanguard(),
+                playerShip = ContentCatalog.CreateFlagship(UnlockRules.ResolveFlagship(profile)),
                 crew = ContentCatalog.CreateCrew(profile),
-                squadrons = ContentCatalog.CreateSquadrons(),
+                squadrons = ContentCatalog.CreateSquadrons(UnlockRules.ResolveFlagship(profile)),
                 routeNodes = ContentCatalog.CreateRoute(seed),
                 convoy = new ConvoyState { supportShip = profile.supportShip },
                 random = new RandomStreamsState
@@ -63,9 +63,12 @@ namespace AetherArk.Core
             if (state.weaponSlots == null) state.weaponSlots = new List<WeaponSlotState>();
             if (state.weaponSlots.Count == 0)
             {
-                state.weaponSlots.Add(new WeaponSlotState { weaponId = ContentCatalog.StartingWeapon });
+                var flagship = ContentCatalog.GetFlagship(state.playerShip?.id) ?? ContentCatalog.GetFlagship(UnlockRules.DefaultFlagship);
+                var starting = flagship?.startingWeapons ?? new[] { ContentCatalog.StartingWeapon };
+                for (var i = 0; i < starting.Length; i++) state.weaponSlots.Add(new WeaponSlotState { weaponId = starting[i] });
                 // The locked tutorial expedition carries the lance too, so the slot system is taught from the first battle.
-                if (state.isFirstExpedition) state.weaponSlots.Add(new WeaponSlotState { weaponId = ContentCatalog.StartingSecondary });
+                if (state.isFirstExpedition && state.weaponSlots.Count < (state.playerShip?.weaponHardpoints ?? 2))
+                    state.weaponSlots.Add(new WeaponSlotState { weaponId = ContentCatalog.StartingSecondary });
             }
             if (state.playerShip != null && state.playerShip.weaponHardpoints < 1) state.playerShip.weaponHardpoints = 2;
         }
@@ -414,6 +417,8 @@ namespace AetherArk.Core
 
         /// <summary>A single missed shot must not hand the ward its regeneration back; longer than one weapon cycle.</summary>
         public const float WardRechargeDelay = 6f;
+        /// <summary>Intercept charges cannot be stockpiled beyond this, so flak cannot make a ship immune to strikes.</summary>
+        public const int MaxInterceptCharges = 3;
 
         private void TickWard(ShipState ship, float dt)
         {
@@ -648,7 +653,7 @@ namespace AetherArk.Core
             var modifiers = ModuleRules.Modifiers(State);
             mount.cooldown = weapon.cooldown * modifiers.weaponCooldown / (1f + 0.2f * SparePower(State.playerShip, State.weaponSlots));
             State.playerWeaponCooldown = mount.cooldown;
-            State.interceptCharges += weapon.interceptCharge;
+            State.interceptCharges = Math.Min(MaxInterceptCharges, State.interceptCharges + weapon.interceptCharge);
 
             var random = State.random.combat;
             var hit = SeededRandom.Chance(ref random, Clamp(Accuracy(State.playerShip, State.enemyShip, true) + weapon.accuracyBonus, 0.2f, 0.98f));
@@ -777,7 +782,7 @@ namespace AetherArk.Core
 
         public float EnemyDamageMultiplier()
         {
-            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.72f : State.difficulty == Difficulty.Harsh ? 1.15f : 1f;
+            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.72f : State.difficulty == Difficulty.Harsh ? 1.1f : 1f;
             return difficultyMultiplier * ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
         }
 

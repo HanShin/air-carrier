@@ -77,11 +77,24 @@ namespace AetherArk.Runtime
                 new Vector2(52f, 320f), new Vector2(656f, 56f));
 
             ui.Text("DifficultyLabel", left, l10n.T("setup.difficulty"), 20, UiFactory.Brass, TextAnchor.MiddleLeft,
-                new Vector2(52f, 250f), new Vector2(260f, 40f), FontStyle.Bold);
+                new Vector2(52f, 262f), new Vector2(260f, 40f), FontStyle.Bold);
             ui.Button("Difficulty", left, "◀  " + l10n.EnumName(controller.Profile.difficulty) + "  ▶", controller.CycleDifficulty,
-                new Vector2(52f, 190f), new Vector2(656f, 56f));
-            ui.Text("Warning", left, l10n.T("setup.warning"), 17, UiFactory.Danger, TextAnchor.MiddleCenter,
-                new Vector2(52f, 110f), new Vector2(656f, 54f), FontStyle.Bold);
+                new Vector2(52f, 210f), new Vector2(656f, 50f));
+
+            var flagshipId = UnlockRules.ResolveFlagship(controller.Profile);
+            var flagship = ContentCatalog.GetFlagship(flagshipId);
+            var unlocked = UnlockRules.UnlockedFlagships(controller.Profile);
+            ui.Text("FlagshipLabel", left, l10n.T("setup.flagship"), 20, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(52f, 168f), new Vector2(260f, 36f), FontStyle.Bold);
+            var flagshipButton = ui.Button("Flagship", left, (unlocked.Count > 1 ? "◀  " : "") + l10n.T(flagship.nameKey) + (unlocked.Count > 1 ? "  ▶" : ""), controller.CycleFlagship,
+                new Vector2(52f, 120f), new Vector2(656f, 46f));
+            flagshipButton.interactable = unlocked.Count > 1 && controller.Profile.tutorialSeen;
+            var lockHint = !controller.Profile.tutorialSeen ? l10n.T("setup.flagship_locked", l10n.T("unlock.tutorial"))
+                : unlocked.Count < ContentCatalog.FlagshipIds().Count ? l10n.T("setup.flagship_locked", l10n.T("unlock.campaign")) : string.Empty;
+            ui.Text("FlagshipDesc", left, l10n.T(flagship.descriptionKey) + (lockHint.Length > 0 ? "\n" + lockHint : string.Empty), 13, UiFactory.TextMuted, TextAnchor.UpperLeft,
+                new Vector2(52f, 62f), new Vector2(656f, 54f));
+            ui.Text("Warning", left, l10n.T("setup.warning"), 14, UiFactory.Danger, TextAnchor.MiddleCenter,
+                new Vector2(52f, 22f), new Vector2(656f, 36f), FontStyle.Bold);
 
             var settings = ui.PanelRect("AccessibilityPanel", ui.Root, new Vector2(980f, 250f), new Vector2(760f, 660f), PanelColor);
             ui.Text("AccessTitle", settings, L("접근성·조작", "ACCESSIBILITY & CONTROLS"), 24, UiFactory.Brass, TextAnchor.MiddleLeft,

@@ -408,6 +408,8 @@ namespace AetherArk.Tests
         }
 
         [TestCase("ship_vanguard")]
+        [TestCase("ship_bastion")]
+        [TestCase("ship_zephyr")]
         [TestCase("enemy_cutter")]
         [TestCase("enemy_cruiser")]
         [TestCase("enemy_carrier")]
@@ -417,7 +419,7 @@ namespace AetherArk.Tests
         public void DeckPlan_CoversEverySystemWithoutOverlapInsideGrid(string shipId)
         {
             var random = 7u;
-            var ship = shipId == "ship_vanguard" ? ContentCatalog.CreateVanguard() : ContentCatalog.CreateEnemyById(shipId, ref random);
+            var ship = shipId.StartsWith("ship_") ? ContentCatalog.CreateFlagship(shipId) : ContentCatalog.CreateEnemyById(shipId, ref random);
             Assert.That(ship.id, Is.EqualTo(shipId));
             var plan = ContentCatalog.GetDeckPlan(ship.id);
             Assert.That(plan, Is.Not.Null);
@@ -1501,6 +1503,109 @@ namespace AetherArk.Tests
             weapons.power = 4; // two spare points
             Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.True);
             Assert.That(simulation.State.weaponSlots[0].cooldown, Is.LessThan(cannon.cooldown * 0.85f), "spare weapons power should speed reloading");
+        }
+
+        [Test]
+        public void Flagships_ThreeAreDefinedLocalizedAndWithinPowerBudget()
+        {
+            var ids = ContentCatalog.FlagshipIds();
+            Assert.That(ids, Is.EquivalentTo(new[] { "ship_vanguard", "ship_bastion", "ship_zephyr" }));
+            var ko = new LocalizationService(Language.Korean);
+            var en = new LocalizationService(Language.English);
+            foreach (var id in ids)
+            {
+                var definition = ContentCatalog.GetFlagship(id);
+                Assert.That(ko.T(definition.nameKey), Is.Not.EqualTo(definition.nameKey), id);
+                Assert.That(en.T(definition.descriptionKey), Is.Not.EqualTo(definition.descriptionKey), id);
+                var ship = ContentCatalog.CreateFlagship(id);
+                Assert.That(ship.id, Is.EqualTo(id));
+                Assert.That(ship.systems.Count, Is.EqualTo(10), id);
+                Assert.That(ship.AllocatedPower(), Is.LessThanOrEqualTo(ship.coreOutput), id + " over-allocates power");
+                Assert.That(ship.weaponHardpoints, Is.GreaterThanOrEqualTo(definition.startingWeapons.Length), id + " must fit its starting weapons");
+                foreach (var weapon in definition.startingWeapons) Assert.That(ContentCatalog.GetWeapon(weapon), Is.Not.Null, id + " starting weapon " + weapon);
+            }
+        }
+
+        [Test]
+        public void NewRun_UsesTheChosenFlagshipWithItsLoadoutAndSlots()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            profile.campaignVictories = 1;
+            profile.flagshipId = "ship_bastion";
+            var state = GameSimulation.NewRun(profile, 71).State;
+            Assert.That(state.playerShip.id, Is.EqualTo("ship_bastion"));
+            Assert.That(state.playerShip.weaponHardpoints, Is.EqualTo(3));
+            Assert.That(state.playerShip.moduleSlots, Is.EqualTo(5));
+            Assert.That(state.weaponSlots.ConvertAll(slot => slot.weaponId), Is.EqualTo(new[] { "heavy_cannon" }));
+            Assert.That(ContentCatalog.GetDeckPlan(state.playerShip.id), Is.Not.Null);
+
+            profile.flagshipId = "ship_zephyr";
+            var zephyr = GameSimulation.NewRun(profile, 72).State;
+            Assert.That(zephyr.playerShip.id, Is.EqualTo("ship_zephyr"));
+            Assert.That(zephyr.playerShip.weaponHardpoints, Is.EqualTo(2));
+            Assert.That(zephyr.weaponSlots.ConvertAll(slot => slot.weaponId), Is.EqualTo(new[] { "aether_cannon", "ward_lance" }));
+            Assert.That(zephyr.squadrons.Find(s => s.type == SquadronType.Interceptor).maxStrength, Is.EqualTo(5), "the Zephyr's interceptors start larger");
+        }
+
+        [Test]
+        public void NewRun_FallsBackToTheVanguardWhenLockedUnknownOrTutorial()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            profile.flagshipId = "ship_zephyr"; // locked: no campaign victory yet
+            Assert.That(GameSimulation.NewRun(profile, 73).State.playerShip.id, Is.EqualTo("ship_vanguard"));
+            profile.flagshipId = "ship_nonsense";
+            Assert.That(GameSimulation.NewRun(profile, 74).State.playerShip.id, Is.EqualTo("ship_vanguard"));
+
+            var tutorial = Profile(Difficulty.Story);
+            tutorial.tutorialSeen = false;
+            tutorial.flagshipId = "ship_bastion";
+            Assert.That(GameSimulation.NewRun(tutorial, GameSimulation.FirstExpeditionSeed).State.playerShip.id, Is.EqualTo("ship_vanguard"));
+        }
+
+        [Test]
+        public void UnlockRules_OpenTheBastionAfterTheTutorialAndTheZephyrAfterACampaign()
+        {
+            var fresh = Profile();
+            fresh.tutorialSeen = false;
+            Assert.That(UnlockRules.IsFlagshipUnlocked(fresh, "ship_vanguard"), Is.True);
+            Assert.That(UnlockRules.IsFlagshipUnlocked(fresh, "ship_bastion"), Is.False);
+            Assert.That(UnlockRules.IsFlagshipUnlocked(fresh, "ship_zephyr"), Is.False);
+
+            var tutorialRun = GameSimulation.NewRun(fresh, GameSimulation.FirstExpeditionSeed).State;
+            tutorialRun.phase = GamePhase.Victory;
+            UnlockRules.RecordVictory(fresh, tutorialRun);
+            Assert.That(fresh.tutorialSeen, Is.True);
+            Assert.That(UnlockRules.IsFlagshipUnlocked(fresh, "ship_bastion"), Is.True);
+            Assert.That(UnlockRules.IsFlagshipUnlocked(fresh, "ship_zephyr"), Is.False, "a one-region tutorial is not a campaign");
+
+            var campaign = GameSimulation.NewRun(fresh, 75).State;
+            campaign.regionIndex = campaign.regionCount; // victory only happens at the last gate
+            campaign.phase = GamePhase.Victory;
+            UnlockRules.RecordVictory(fresh, campaign);
+            Assert.That(fresh.campaignVictories, Is.EqualTo(1));
+            Assert.That(UnlockRules.IsFlagshipUnlocked(fresh, "ship_zephyr"), Is.True);
+            Assert.That(UnlockRules.UnlockedFlagships(fresh), Is.EqualTo(new[] { "ship_vanguard", "ship_bastion", "ship_zephyr" }));
+        }
+
+        [Test]
+        public void SaveService_RoundTripsFlagshipChoiceAndCampaignVictories()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "aether-ark-flagship-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var service = new SaveService(root);
+                var profile = Profile();
+                profile.flagshipId = "ship_bastion";
+                profile.campaignVictories = 2;
+                service.SaveProfile(profile);
+                var loaded = service.LoadProfile();
+                Assert.That(loaded.flagshipId, Is.EqualTo("ship_bastion"));
+                Assert.That(loaded.campaignVictories, Is.EqualTo(2));
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         }
 
         [TestCase(WeatherType.Thunderhead, -0.08f)]

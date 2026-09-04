@@ -111,6 +111,7 @@ namespace AetherArk.Runtime
             var args = Environment.GetCommandLineArgs();
             if (TryDebugRouteLaunch(args)) return;
             if (TryDebugEventLaunch(args)) return;
+            if (Array.IndexOf(args, "-debug-setup") >= 0) { ShowSetup(); return; }
             if (TryDebugPortLaunch(args)) return;
             var index = Array.IndexOf(args, "-debug-combat");
             if (index < 0) return;
@@ -324,6 +325,15 @@ namespace AetherArk.Runtime
             SaveSetupAndRefresh();
         }
 
+        public void CycleFlagship()
+        {
+            var unlocked = UnlockRules.UnlockedFlagships(Profile);
+            if (unlocked.Count == 0) return;
+            var index = unlocked.IndexOf(Profile.flagshipId);
+            Profile.flagshipId = unlocked[(index + 1) % unlocked.Count];
+            SaveSetupAndRefresh();
+        }
+
         public void ToggleAutoPause()
         {
             Profile.accessibility.autoPauseOnWarning = !Profile.accessibility.autoPauseOnWarning;
@@ -417,8 +427,8 @@ namespace AetherArk.Runtime
 
         private void RecordFirstExpeditionCompletion()
         {
-            if (Simulation == null || Simulation.State.phase != GamePhase.Victory || !Simulation.State.isFirstExpedition) return;
-            Profile.tutorialSeen = true;
+            if (Simulation == null || Simulation.State.phase != GamePhase.Victory) return;
+            UnlockRules.RecordVictory(Profile, Simulation.State);
             saves.SaveProfile(Profile);
         }
 

@@ -8,33 +8,68 @@ namespace AetherArk.Content
     {
         private static readonly Dictionary<string, EncounterDefinition> Encounters = BuildEncounters();
 
-        public static ShipState CreateVanguard()
+        private static readonly FlagshipDefinition[] Flagships =
         {
+            new FlagshipDefinition
+            {
+                id = "ship_vanguard", nameKey = "flagship.ship_vanguard", descriptionKey = "flagship.ship_vanguard.desc", displayName = "EAS Dawn Refuge",
+                hull = 32f, armor = 18f, ward = 12f, coreOutput = 12, weaponHardpoints = 2, moduleSlots = 4,
+                startingWeapons = new[] { "aether_cannon" }, interceptorStrength = 4, bomberStrength = 3,
+                power = new[] { 1, 0, 1, 2, 2, 2, 1, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 4, 4, 3, 3, 2, 2 }
+            },
+            new FlagshipDefinition
+            {
+                id = "ship_bastion", nameKey = "flagship.ship_bastion", descriptionKey = "flagship.ship_bastion.desc", displayName = "EAS Iron Bastion",
+                hull = 40f, armor = 24f, ward = 6f, coreOutput = 11, weaponHardpoints = 3, moduleSlots = 5,
+                startingWeapons = new[] { "heavy_cannon" }, interceptorStrength = 3, bomberStrength = 3,
+                power = new[] { 1, 0, 1, 1, 1, 2, 1, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 5, 2, 3, 2, 2 }
+            },
+            new FlagshipDefinition
+            {
+                id = "ship_zephyr", nameKey = "flagship.ship_zephyr", descriptionKey = "flagship.ship_zephyr.desc", displayName = "EAS Zephyr Kite",
+                hull = 32f, armor = 14f, ward = 16f, coreOutput = 14, weaponHardpoints = 2, moduleSlots = 4,
+                startingWeapons = new[] { "aether_cannon", "ward_lance" }, interceptorStrength = 5, bomberStrength = 3,
+                power = new[] { 1, 0, 1, 3, 2, 2, 3, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 4, 3, 2, 2 }
+            }
+        };
+
+        public static List<string> FlagshipIds()
+        {
+            var ids = new List<string>();
+            for (var i = 0; i < Flagships.Length; i++) ids.Add(Flagships[i].id);
+            return ids;
+        }
+
+        public static FlagshipDefinition GetFlagship(string id)
+        {
+            for (var i = 0; i < Flagships.Length; i++) if (Flagships[i].id == id) return Flagships[i];
+            return null;
+        }
+
+        public static ShipState CreateFlagship(string id)
+        {
+            var definition = GetFlagship(id) ?? Flagships[0];
             var ship = new ShipState
             {
-                id = "ship_vanguard",
-                displayName = "EAS Dawn Refuge",
-                hull = 32f,
-                maxHull = 32f,
-                armor = 18f,
-                maxArmor = 18f,
-                ward = 12f,
-                maxWard = 12f,
-                coreOutput = 12,
+                id = definition.id,
+                displayName = definition.displayName,
+                hull = definition.hull, maxHull = definition.hull,
+                armor = definition.armor, maxArmor = definition.armor,
+                ward = definition.ward, maxWard = definition.ward,
+                coreOutput = definition.coreOutput,
+                weaponHardpoints = definition.weaponHardpoints,
+                moduleSlots = definition.moduleSlots,
                 altitude = AltitudeBand.Medium
             };
-
-            AddSystem(ship, ShipSystemType.Bridge, "system.bridge", 1, 2);
-            AddSystem(ship, ShipSystemType.AetherCore, "system.core", 0, 0);
-            AddSystem(ship, ShipSystemType.LiftArray, "system.lift", 1, 3);
-            AddSystem(ship, ShipSystemType.Engines, "system.engines", 2, 4);
-            AddSystem(ship, ShipSystemType.Ward, "system.ward", 2, 4);
-            AddSystem(ship, ShipSystemType.Weapons, "system.weapons", 2, 4);
-            AddSystem(ship, ShipSystemType.FlightDeck, "system.deck", 1, 3);
-            AddSystem(ship, ShipSystemType.Sensors, "system.sensors", 1, 3);
-            AddSystem(ship, ShipSystemType.Infirmary, "system.infirmary", 0, 2);
-            AddSystem(ship, ShipSystemType.LifeSupport, "system.life", 1, 2);
+            for (var i = 0; i < SystemOrder.Length; i++)
+                AddSystem(ship, SystemOrder[i], SystemKeys[i], definition.power[i], definition.maxPower[i]);
             return ship;
+        }
+
+        /// <summary>The original flagship; kept for callers and tests that predate flagship selection.</summary>
+        public static ShipState CreateVanguard()
+        {
+            return CreateFlagship("ship_vanguard");
         }
 
         private sealed class EnemyDefinition
@@ -68,7 +103,7 @@ namespace AetherArk.Content
             },
             new EnemyDefinition
             {
-                id = "enemy_scout", weapons = new[] { "ward_lance" }, displayName = "Imperial Scout Frigate", tier = 1, weight = 20,
+                id = "enemy_scout", weapons = new[] { "bolt_thrower" }, displayName = "Imperial Scout Frigate", tier = 1, weight = 20,
                 hull = 20f, armor = 8f, ward = 8f, coreOutput = 11,
                 power = new[] { 1, 0, 1, 3, 1, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 1, 3, 1, 2 }
             },
@@ -86,7 +121,7 @@ namespace AetherArk.Content
             },
             new EnemyDefinition
             {
-                id = "enemy_monitor", weapons = new[] { "bolt_thrower" }, displayName = "Imperial Bulwark Monitor", tier = 2, weight = 40,
+                id = "enemy_monitor", weapons = new[] { "aether_cannon" }, displayName = "Imperial Bulwark Monitor", tier = 2, weight = 40,
                 hull = 30f, armor = 22f, ward = 16f, coreOutput = 11,
                 power = new[] { 1, 0, 1, 1, 3, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 4, 4, 1, 3, 1, 2 }
             }
@@ -298,6 +333,30 @@ namespace AetherArk.Content
                 Tile(ShipSystemType.Infirmary, 1, 2),
                 Tile(ShipSystemType.Ward, 2, 2, 2, 1));
 
+            plans["ship_bastion"] = Plan("ship_bastion", 6, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 2),
+                Tile(ShipSystemType.LifeSupport, 0, 2),
+                Tile(ShipSystemType.LiftArray, 1, 0),
+                Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.Infirmary, 1, 2),
+                Tile(ShipSystemType.Weapons, 2, 0, 2, 2),
+                Tile(ShipSystemType.Ward, 2, 2, 2, 1),
+                Tile(ShipSystemType.FlightDeck, 4, 0),
+                Tile(ShipSystemType.Sensors, 4, 1),
+                Tile(ShipSystemType.Bridge, 5, 0, 1, 2));
+
+            plans["ship_zephyr"] = Plan("ship_zephyr", 7, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 3),
+                Tile(ShipSystemType.LiftArray, 1, 0),
+                Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.LifeSupport, 1, 2),
+                Tile(ShipSystemType.FlightDeck, 2, 0, 3, 2),
+                Tile(ShipSystemType.Infirmary, 2, 2),
+                Tile(ShipSystemType.Ward, 3, 2, 2, 1),
+                Tile(ShipSystemType.Sensors, 5, 0, 1, 2),
+                Tile(ShipSystemType.Weapons, 5, 2),
+                Tile(ShipSystemType.Bridge, 6, 0, 1, 2));
+
             plans["enemy_cutter"] = Plan("enemy_cutter", 5, 2,
                 Tile(ShipSystemType.Engines, 0, 0),
                 Tile(ShipSystemType.AetherCore, 1, 0),
@@ -444,17 +503,23 @@ namespace AetherArk.Content
 
         public static List<SquadronState> CreateSquadrons()
         {
+            return CreateSquadrons("ship_vanguard");
+        }
+
+        public static List<SquadronState> CreateSquadrons(string flagshipId)
+        {
+            var flagship = GetFlagship(flagshipId) ?? Flagships[0];
             return new List<SquadronState>
             {
                 new SquadronState
                 {
                     id = "squad_kestrel", displayKey = "squadron.kestrel", type = SquadronType.Interceptor,
-                    strength = 4, maxStrength = 4, ordnanceCost = 1, pilotCrewId = "crew_pilot"
+                    strength = flagship.interceptorStrength, maxStrength = flagship.interceptorStrength, ordnanceCost = 1, pilotCrewId = "crew_pilot"
                 },
                 new SquadronState
                 {
                     id = "squad_ember", displayKey = "squadron.ember", type = SquadronType.Bomber,
-                    strength = 3, maxStrength = 3, ordnanceCost = 2, pilotCrewId = "crew_marine"
+                    strength = flagship.bomberStrength, maxStrength = flagship.bomberStrength, ordnanceCost = 2, pilotCrewId = "crew_marine"
                 }
             };
         }

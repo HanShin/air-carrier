@@ -42,6 +42,8 @@ namespace AetherArk.Core
         public CrewLineage captainLineage = CrewLineage.Human;
         public SupportShipType supportShip = SupportShipType.Workshop;
         public bool tutorialSeen;
+        public int campaignVictories;
+        public string flagshipId = "ship_vanguard";
         public AccessibilitySettings accessibility = new AccessibilitySettings();
         public List<string> unlocks = new List<string> { "ship_vanguard", "squad_interceptor", "squad_bomber" };
     }
@@ -236,6 +238,25 @@ namespace AetherArk.Core
         public string bodyKey;
         public EncounterType type;
         public List<EncounterChoiceDefinition> choices = new List<EncounterChoiceDefinition>();
+    }
+
+    [Serializable]
+    public sealed class FlagshipDefinition
+    {
+        public string id;
+        public string nameKey;
+        public string descriptionKey;
+        public string displayName;
+        public float hull, armor, ward;
+        public int coreOutput;
+        public int weaponHardpoints = 2;
+        public int moduleSlots = 4;
+        public string[] startingWeapons;
+        public int interceptorStrength = 4;
+        public int bomberStrength = 3;
+        /// <summary>Power per system in enum order: Bridge, AetherCore, LiftArray, Engines, Ward, Weapons, FlightDeck, Sensors, Infirmary, LifeSupport.</summary>
+        public int[] power;
+        public int[] maxPower;
     }
 
     [Serializable]

@@ -59,6 +59,16 @@ namespace AetherArk.Content
             Add("setup.lineage", "함장 종족", "Captain lineage");
             Add("setup.support", "지원선", "Support ship");
             Add("setup.difficulty", "난이도", "Difficulty");
+            Add("setup.flagship", "기함", "Flagship");
+            Add("setup.flagship_locked", "다음 기함 해금: {0}", "Next flagship unlocks after: {0}");
+            Add("unlock.tutorial", "첫 원정 승리", "winning the first expedition");
+            Add("unlock.campaign", "4지역 캠페인 승리", "winning a full four-region campaign");
+            Add("flagship.ship_vanguard", "EAS 여명의 피난처", "EAS Dawn Refuge");
+            Add("flagship.ship_vanguard.desc", "균형 잡힌 항모. 선체 32·장갑 18·결계 12, 하드포인트 2, 모듈 4.", "Balanced carrier. Hull 32 · armor 18 · ward 12, 2 hardpoints, 4 module slots.");
+            Add("flagship.ship_bastion", "EAS 철벽", "EAS Iron Bastion");
+            Add("flagship.ship_bastion.desc", "포대형 중장갑함. 선체 40·장갑 24·결계 6, 하드포인트 3, 모듈 5, 갑판 약함. 중포 장착.", "Armoured gun platform. Hull 40 · armor 24 · ward 6, 3 hardpoints, 5 module slots, weak deck. Mounts a heavy cannon.");
+            Add("flagship.ship_zephyr", "EAS 서풍 연", "EAS Zephyr Kite");
+            Add("flagship.ship_zephyr.desc", "고속 경항모. 선체 32·장갑 14·결계 16, 하드포인트 2, 모듈 4, 강한 갑판·엔진·센서. 요격대 5기. 에테르 포·결계 랜스 장착.", "Fast light carrier. Hull 32 · armor 14 · ward 16, 2 hardpoints, 4 module slots, strong deck, engines and sensors. Five interceptors. Mounts an aether cannon and a ward lance.");
             Add("setup.launch", "피난선단 출항", "Launch the convoy");
             Add("setup.back", "돌아가기", "Back");
             Add("setup.warning", "함장이 사망하면 원정은 즉시 끝납니다.", "The expedition ends immediately if the captain dies.");
