@@ -1917,5 +1917,85 @@ namespace AetherArk.Tests
         {
             Assert.That(ContentCatalog.GetWeather(type).accuracyModifier, Is.EqualTo(expected).Within(0.001f));
         }
+
+        [Test]
+        public void Lineages_AllHaveLocalizedAuthoredRules()
+        {
+            var korean = new LocalizationService(Language.Korean);
+            var english = new LocalizationService(Language.English);
+            var seen = new HashSet<CrewLineage>();
+            foreach (var rule in LineageRules.All())
+            {
+                seen.Add(rule.lineage);
+                Assert.That(rule.maxHealth, Is.GreaterThan(0f));
+                Assert.That(korean.T(rule.descriptionKey), Is.Not.EqualTo(rule.descriptionKey));
+                Assert.That(english.T(rule.descriptionKey), Is.Not.EqualTo(rule.descriptionKey));
+            }
+            Assert.That(seen.Count, Is.EqualTo(6));
+            Assert.That(LineageRules.Get(CrewLineage.Elf).overchargeInstabilityMultiplier, Is.LessThan(1f));
+            Assert.That(LineageRules.Get(CrewLineage.Dwarf).repairMultiplier, Is.GreaterThan(1f));
+            Assert.That(LineageRules.Get(CrewLineage.Orc).boardingMultiplier, Is.GreaterThan(1f));
+            Assert.That(LineageRules.Get(CrewLineage.Goblin).sortieTimeMultiplier, Is.LessThan(1f));
+            Assert.That(LineageRules.Get(CrewLineage.Avian).oxygenDamageMultiplier, Is.LessThan(1f));
+        }
+
+        [Test]
+        public void CaptainLineage_DoctrinesChangeStartingStrategy()
+        {
+            var human = GameSimulation.NewRun(ProfileWithLineage(CrewLineage.Human), 8101).State;
+            var elf = GameSimulation.NewRun(ProfileWithLineage(CrewLineage.Elf), 8101).State;
+            var dwarf = GameSimulation.NewRun(ProfileWithLineage(CrewLineage.Dwarf), 8101).State;
+            var orc = GameSimulation.NewRun(ProfileWithLineage(CrewLineage.Orc), 8101).State;
+            var goblin = GameSimulation.NewRun(ProfileWithLineage(CrewLineage.Goblin), 8101).State;
+            var avian = GameSimulation.NewRun(ProfileWithLineage(CrewLineage.Avian), 8101).State;
+
+            Assert.That(human.convoy.morale, Is.EqualTo(80));
+            Assert.That(elf.resources.aether, Is.EqualTo(18));
+            Assert.That(dwarf.playerShip.maxArmor, Is.EqualTo(22f));
+            Assert.That(orc.playerShip.maxHull, Is.EqualTo(36f));
+            Assert.That(orc.convoy.survivors, Is.EqualTo(1225));
+            Assert.That(goblin.resources.ordnance, Is.EqualTo(10));
+            Assert.That(goblin.resources.salvage, Is.EqualTo(24));
+            Assert.That(avian.resources.aether, Is.EqualTo(17));
+            Assert.That(avian.resources.supplies, Is.EqualTo(14));
+        }
+
+        [Test]
+        public void ElfResonator_ReducesOverchargeInstability()
+        {
+            var simulation = GameSimulation.NewRun(Profile(), 8102);
+            simulation.BeginCombat(1, false);
+            var resonator = simulation.State.crew.Find(crew => crew.role == CrewRole.Resonator);
+            resonator.currentRoom = ShipSystemType.Weapons;
+
+            var result = simulation.Overcharge(ShipSystemType.Weapons);
+
+            Assert.That(result.success, Is.True);
+            Assert.That(simulation.State.playerShip.instability, Is.EqualTo(14.3f).Within(0.01f));
+        }
+
+        [Test]
+        public void GoblinPilot_CompletesSortiePhasesFaster()
+        {
+            var goblin = GameSimulation.NewRun(Profile(), 8103);
+            var human = GameSimulation.NewRun(Profile(), 8103);
+            goblin.BeginCombat(1, false);
+            human.BeginCombat(1, false);
+            var goblinWing = goblin.State.squadrons[0];
+            var humanWing = human.State.squadrons[0];
+            human.State.crew.Find(crew => crew.id == humanWing.pilotCrewId).lineage = CrewLineage.Human;
+
+            Assert.That(goblin.LaunchSquadron(goblinWing.id, SquadronMission.Intercept, ShipSystemType.FlightDeck).success, Is.True);
+            Assert.That(human.LaunchSquadron(humanWing.id, SquadronMission.Intercept, ShipSystemType.FlightDeck).success, Is.True);
+            Assert.That(goblinWing.missionTimer, Is.LessThan(humanWing.missionTimer));
+            Assert.That(goblinWing.missionTimer / humanWing.missionTimer, Is.EqualTo(0.82f).Within(0.01f));
+        }
+
+        private static ProfileState ProfileWithLineage(CrewLineage lineage)
+        {
+            var profile = Profile();
+            profile.captainLineage = lineage;
+            return profile;
+        }
     }
 }

@@ -581,15 +581,7 @@ namespace AetherArk.Content
 
         public static float MaxHealth(CrewLineage lineage)
         {
-            switch (lineage)
-            {
-                case CrewLineage.Elf: return 80f;
-                case CrewLineage.Orc: return 125f;
-                case CrewLineage.Dwarf: return 110f;
-                case CrewLineage.Goblin: return 90f;
-                case CrewLineage.Avian: return 88f;
-                default: return 100f;
-            }
+            return LineageRules.Get(lineage).maxHealth;
         }
 
         public static List<SquadronState> CreateSquadrons()

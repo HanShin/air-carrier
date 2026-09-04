@@ -48,7 +48,7 @@ namespace AetherArk.Runtime
                 new Vector2(60f, 114f), new Vector2(400f, 62f));
             ui.Button("Quit", panel, l10n.T("menu.quit"), controller.Quit,
                 new Vector2(60f, 32f), new Vector2(400f, 62f), new Color(0.22f, 0.13f, 0.16f, 0.95f));
-            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.2 · COMBAT UX", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
+            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.3 · LINEAGES", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
                 new Vector2(1500f, 28f), new Vector2(360f, 30f));
         }
 
@@ -70,6 +70,8 @@ namespace AetherArk.Runtime
                 new Vector2(52f, 510f), new Vector2(260f, 40f), FontStyle.Bold);
             ui.Button("Lineage", left, "◀  " + l10n.EnumName(controller.Profile.captainLineage) + "  ▶", controller.CycleLineage,
                 new Vector2(52f, 450f), new Vector2(656f, 56f));
+            ui.Text("LineageDescription", left, l10n.T(LineageRules.Get(controller.Profile.captainLineage).descriptionKey), 13,
+                UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(52f, 421f), new Vector2(656f, 25f));
 
             ui.Text("SupportLabel", left, l10n.T("setup.support"), 20, UiFactory.Brass, TextAnchor.MiddleLeft,
                 new Vector2(52f, 380f), new Vector2(260f, 40f), FontStyle.Bold);
@@ -607,7 +609,7 @@ namespace AetherArk.Runtime
                 var crew = state.crew[i];
                 var y = 494f - i * 98f;
                 var health = crew.isDead ? L("사망", "DEAD") : crew.IsDowned ? L("구조 대기", "DOWNED") : crew.onSortie ? L("출격 중", "SORTIE") : $"HP {crew.health:0}/{crew.maxHealth:0}";
-                var label = $"{(crew.isCaptain ? "★ " : "")}{crew.displayName}\n{crew.role}\n{health}";
+                var label = $"{(crew.isCaptain ? "★ " : "")}{crew.displayName}\n{crew.role} · {l10n.EnumName(crew.lineage)}\n{health}";
                 var selected = selectedCrewId == crew.id;
                 var color = crew.isDead ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : selected ? UiFactory.Violet : UiFactory.PanelSoft;
                 var localCrew = crew;

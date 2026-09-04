@@ -38,6 +38,7 @@ namespace AetherArk.Core
 
             EnsureLoadout(state);
             EnsureWings(state);
+            LineageRules.ApplyCaptainDoctrine(state, profile.captainLineage);
             if (profile.tutorialSeen) ContentCatalog.AssignEncounterVariants(state.routeNodes, seed);
 
             if (profile.difficulty == Difficulty.Story)
@@ -527,19 +528,19 @@ namespace AetherArk.Core
 
         private void TickIntruders(RoomState room, float dt)
         {
-            var defenders = 0;
+            var defenderPower = 0f;
             var marinePresent = false;
             for (var i = 0; i < State.crew.Count; i++)
             {
                 var crew = State.crew[i];
                 if (!crew.IsActive || crew.currentRoom != room.system) continue;
-                defenders++;
+                defenderPower += LineageRules.Get(crew.lineage).boardingMultiplier;
                 if (crew.role == CrewRole.Marine) marinePresent = true;
             }
 
-            if (defenders > 0)
+            if (defenderPower > 0f)
             {
-                room.intruderProgress += dt * (0.35f * defenders + (marinePresent ? 0.6f : 0f)) * ModuleRules.Modifiers(State).boardingDefense;
+                room.intruderProgress += dt * (0.35f * defenderPower + (marinePresent ? 0.6f : 0f)) * ModuleRules.Modifiers(State).boardingDefense;
                 while (room.intruderProgress >= 1f && room.intruders > 0)
                 {
                     room.intruderProgress -= 1f;
@@ -566,7 +567,7 @@ namespace AetherArk.Core
                 if (crew.health <= 0f)
                 {
                     crew.downedSeconds += dt;
-                    if (crew.downedSeconds >= 12f)
+                    if (crew.downedSeconds >= LineageRules.Get(crew.lineage).rescueWindow)
                     {
                         crew.isDead = true;
                         AddLog("log.crew_lost", crew.displayName);
@@ -584,9 +585,10 @@ namespace AetherArk.Core
                 room.fire = Math.Max(0f, room.fire - repairRate * 0.8f * dt);
                 room.breach = Math.Max(0f, room.breach - repairRate * 0.55f * dt);
 
-                var danger = room.fire * 0.018f * (crewModifiers.fireResistance ? 0.5f : 1f) + (room.oxygen < 22f ? 3.2f : 0f) + room.intruders * 1.5f;
-                if (crew.lineage == CrewLineage.Dwarf) danger *= 0.72f;
-                if (crew.lineage == CrewLineage.Avian && room.oxygen < 22f) danger *= 0.5f;
+                var lineage = LineageRules.Get(crew.lineage);
+                var environmentalDanger = (room.fire * 0.018f * (crewModifiers.fireResistance ? 0.5f : 1f) + room.intruders * 1.5f) * lineage.hazardDamageMultiplier;
+                var oxygenDanger = (room.oxygen < 22f ? 3.2f : 0f) * lineage.oxygenDamageMultiplier;
+                var danger = environmentalDanger + oxygenDanger;
                 crew.health = Math.Max(0f, crew.health - danger * dt);
             }
 
@@ -605,8 +607,7 @@ namespace AetherArk.Core
         private static float CrewRepairRate(CrewState crew)
         {
             var rate = 0.65f + crew.skillLevel * 0.25f;
-            if (crew.lineage == CrewLineage.Dwarf) rate *= 1.4f;
-            if (crew.lineage == CrewLineage.Goblin) rate *= 1.22f;
+            rate *= LineageRules.Get(crew.lineage).repairMultiplier;
             if (crew.role == CrewRole.Engineer) rate *= 1.35f;
             return rate;
         }
@@ -633,14 +634,15 @@ namespace AetherArk.Core
             if (system == null || system.maxPower == 0) return CommandResult.Fail("command.invalid_system");
             if (resonator == null) return CommandResult.Fail("command.need_resonator");
             if (system.overchargeSeconds > 0f) return CommandResult.Fail("command.already_overcharged");
+            var lineage = LineageRules.Get(resonator.lineage);
             system.overchargeSeconds = 8f;
-            State.playerShip.instability = Clamp(State.playerShip.instability + 22f, 0f, 100f);
+            State.playerShip.instability = Clamp(State.playerShip.instability + 22f * lineage.overchargeInstabilityMultiplier, 0f, 100f);
             AddLog("log.overcharge", type.ToString());
 
             if (State.playerShip.instability >= 75f)
             {
                 var random = State.random.combat;
-                if (SeededRandom.Chance(ref random, 0.32f))
+                if (SeededRandom.Chance(ref random, 0.32f * lineage.overchargeAccidentMultiplier))
                 {
                     system.damage = Math.Min(system.maxDamage, system.damage + 18f);
                     State.playerShip.GetRoom(type).fire = Math.Min(100f, State.playerShip.GetRoom(type).fire + 22f);
@@ -846,7 +848,7 @@ namespace AetherArk.Core
 
         public float EnemyDamageMultiplier()
         {
-            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.66f : State.difficulty == Difficulty.Harsh ? 1.3f : 1f;
+            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.66f : State.difficulty == Difficulty.Harsh ? 1.2f : 1f;
             return difficultyMultiplier * ContentCatalog.GetRegion(State.regionIndex).enemyDamageMultiplier;
         }
 
@@ -907,7 +909,7 @@ namespace AetherArk.Core
             squadron.mission = mission;
             squadron.targetSystem = target;
             squadron.status = SquadronStatus.Launching;
-            squadron.missionTimer = Math.Max(0.8f, 2.2f - deck.EffectivePower * 0.3f) * ModuleRules.Modifiers(State).squadronTime * (wing?.missionTime ?? 1f);
+            squadron.missionTimer = Math.Max(0.8f, 2.2f - deck.EffectivePower * 0.3f) * ModuleRules.Modifiers(State).squadronTime * (wing?.missionTime ?? 1f) * PilotLineage(squadron).sortieTimeMultiplier;
             squadron.phaseDuration = squadron.missionTimer;
             var pilot = State.crew.Find(crew => crew.id == squadron.pilotCrewId);
             if (pilot != null) pilot.onSortie = true;
@@ -928,7 +930,7 @@ namespace AetherArk.Core
                 if (squadron.status == SquadronStatus.Launching)
                 {
                     squadron.status = SquadronStatus.OnMission;
-                    squadron.missionTimer = 4.5f * weather.squadronTimeModifier * (WingOf(squadron)?.missionTime ?? 1f);
+                    squadron.missionTimer = 4.5f * weather.squadronTimeModifier * (WingOf(squadron)?.missionTime ?? 1f) * PilotLineage(squadron).sortieTimeMultiplier;
                     squadron.phaseDuration = squadron.missionTimer;
                     AddLog("log.squadron_on_mission", squadron.displayKey);
                     RaiseCombatAlert("alert.squadron_on_mission", squadron.displayKey, AlertSeverity.Info, false);
@@ -939,7 +941,7 @@ namespace AetherArk.Core
                     if (squadron.status != SquadronStatus.Destroyed)
                     {
                         squadron.status = SquadronStatus.Recovering;
-                        squadron.missionTimer = 2.3f * weather.squadronTimeModifier * (WingOf(squadron)?.missionTime ?? 1f);
+                        squadron.missionTimer = 2.3f * weather.squadronTimeModifier * (WingOf(squadron)?.missionTime ?? 1f) * PilotLineage(squadron).sortieTimeMultiplier;
                         squadron.phaseDuration = squadron.missionTimer;
                         AddLog("log.squadron_returning", squadron.displayKey);
                         RaiseCombatAlert("alert.squadron_returning", squadron.displayKey, AlertSeverity.Info, false);
@@ -997,6 +999,7 @@ namespace AetherArk.Core
             var lossChance = 0.14f + (enemyDeck?.EffectivePower ?? 0) * 0.035f;
             if (State.currentWeather == WeatherType.Turbulence || State.currentWeather == WeatherType.Icing) lossChance += 0.1f;
             lossChance *= WingOf(squadron)?.lossResistance ?? 1f;
+            lossChance *= PilotLineage(squadron).sortieLossMultiplier;
             if (SeededRandom.Chance(ref random, lossChance))
             {
                 squadron.strength--;
@@ -1018,6 +1021,12 @@ namespace AetherArk.Core
                 AddLog("log.squadron_destroyed", squadron.displayKey);
                 RaiseCombatAlert("alert.squadron_destroyed", squadron.displayKey, AlertSeverity.Critical, true);
             }
+        }
+
+        private LineageDefinition PilotLineage(SquadronState squadron)
+        {
+            var pilot = State.crew.Find(crew => crew.id == squadron.pilotCrewId);
+            return LineageRules.Get(pilot?.lineage ?? CrewLineage.Human);
         }
 
         private void EnemySquadronStrike()

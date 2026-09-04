@@ -396,6 +396,12 @@ namespace AetherArk.Content
             Add("enum.crewlineage.orc", "오크", "Orc");
             Add("enum.crewlineage.goblin", "고블린", "Goblin");
             Add("enum.crewlineage.avian", "조인계 수인", "Avian");
+            Add("lineage.human.desc", "지휘·범용: 수리·제압 8% 향상 · 함장 교리: 시작 사기 +8", "Command & versatility: +8% repair and boarding power · Captain doctrine: +8 starting morale");
+            Add("lineage.elf.desc", "공명: 과부하 불안정도 35%↓, 사고율 45%↓ · 함장 교리: 에테르 +2", "Resonance: -35% overload instability, -45% accident risk · Captain doctrine: +2 aether");
+            Add("lineage.dwarf.desc", "수리·내화: 수리 40%↑, 화재·침입 피해 28%↓ · 함장 교리: 장갑 +4", "Repair & endurance: +40% repair, -28% fire/intruder damage · Captain doctrine: +4 armor");
+            Add("lineage.orc.desc", "구조·백병전: 체력 125, 제압력 55%↑, 구조시간 +4초 · 함장 교리: 선체 +4·생존자 +25", "Rescue & combat: 125 health, +55% boarding power, +4s rescue window · Captain doctrine: +4 hull, +25 survivors");
+            Add("lineage.goblin.desc", "갑판·신속작업: 수리 22%↑, 편대 임무 18% 단축 · 함장 교리: 군수품 +2·인양물 +4", "Deck & rapid work: +22% repair, -18% sortie time · Captain doctrine: +2 ordnance, +4 salvage");
+            Add("lineage.avian.desc", "고고도 적응: 저산소 피해 65%↓, 편대 손실률 30%↓ · 함장 교리: 에테르 +1·보급 +2", "High-altitude adaptation: -65% low-oxygen damage, -30% sortie loss · Captain doctrine: +1 aether, +2 supplies");
             Add("enum.squadronstatus.ready", "출격 가능", "Ready");
             Add("enum.squadronstatus.launching", "이륙 중", "Launching");
             Add("enum.squadronstatus.onmission", "임무 수행", "On mission");
