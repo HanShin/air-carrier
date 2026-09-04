@@ -12,21 +12,21 @@ namespace AetherArk.Content
         {
             new FlagshipDefinition
             {
-                id = "ship_vanguard", nameKey = "flagship.ship_vanguard", descriptionKey = "flagship.ship_vanguard.desc", displayName = "EAS Dawn Refuge",
+                id = "ship_vanguard", startingWings = new[] { "kestrel_interceptors", "ember_bombers" }, wingBays = 2, nameKey = "flagship.ship_vanguard", descriptionKey = "flagship.ship_vanguard.desc", displayName = "EAS Dawn Refuge",
                 hull = 32f, armor = 18f, ward = 12f, coreOutput = 12, weaponHardpoints = 2, moduleSlots = 4,
                 startingWeapons = new[] { "aether_cannon" }, interceptorStrength = 4, bomberStrength = 3,
                 power = new[] { 1, 0, 1, 2, 2, 2, 1, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 4, 4, 3, 3, 2, 2 }
             },
             new FlagshipDefinition
             {
-                id = "ship_bastion", nameKey = "flagship.ship_bastion", descriptionKey = "flagship.ship_bastion.desc", displayName = "EAS Iron Bastion",
+                id = "ship_bastion", startingWings = new[] { "kestrel_interceptors", "ember_bombers" }, wingBays = 2, nameKey = "flagship.ship_bastion", descriptionKey = "flagship.ship_bastion.desc", displayName = "EAS Iron Bastion",
                 hull = 40f, armor = 24f, ward = 6f, coreOutput = 11, weaponHardpoints = 3, moduleSlots = 5,
                 startingWeapons = new[] { "heavy_cannon" }, interceptorStrength = 3, bomberStrength = 3,
                 power = new[] { 1, 0, 1, 1, 1, 2, 1, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 5, 2, 3, 2, 2 }
             },
             new FlagshipDefinition
             {
-                id = "ship_zephyr", nameKey = "flagship.ship_zephyr", descriptionKey = "flagship.ship_zephyr.desc", displayName = "EAS Zephyr Kite",
+                id = "ship_zephyr", startingWings = new[] { "kestrel_interceptors", "ember_bombers", "far_eyes" }, wingBays = 3, nameKey = "flagship.ship_zephyr", descriptionKey = "flagship.ship_zephyr.desc", displayName = "EAS Zephyr Kite",
                 hull = 32f, armor = 14f, ward = 16f, coreOutput = 14, weaponHardpoints = 2, moduleSlots = 4,
                 startingWeapons = new[] { "aether_cannon", "ward_lance" }, interceptorStrength = 5, bomberStrength = 3,
                 power = new[] { 1, 0, 1, 3, 2, 2, 3, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 4, 3, 2, 2 }
@@ -59,6 +59,7 @@ namespace AetherArk.Content
                 coreOutput = definition.coreOutput,
                 weaponHardpoints = definition.weaponHardpoints,
                 moduleSlots = definition.moduleSlots,
+                wingBays = definition.wingBays,
                 altitude = AltitudeBand.Medium
             };
             for (var i = 0; i < SystemOrder.Length; i++)
@@ -252,6 +253,67 @@ namespace AetherArk.Content
                 pool.RemoveAt(index);
                 weights.RemoveAt(index);
             }
+            return offers;
+        }
+
+        private static readonly Dictionary<string, WingDefinition> Wings = BuildWings();
+
+        private static Dictionary<string, WingDefinition> BuildWings()
+        {
+            var result = new Dictionary<string, WingDefinition>();
+            WingLibrary.AddAll(result);
+            return result;
+        }
+
+        public static WingDefinition GetWing(string id)
+        {
+            return !string.IsNullOrEmpty(id) && Wings.TryGetValue(id, out var wing) ? wing : null;
+        }
+
+        public static List<string> WingIds()
+        {
+            return new List<string>(Wings.Keys);
+        }
+
+        /// <summary>Default wing for a specialty, used to backfill saves that predate wings.</summary>
+        public static string DefaultWingFor(SquadronType type)
+        {
+            switch (type)
+            {
+                case SquadronType.Bomber: return "ember_bombers";
+                case SquadronType.Escort: return "sky_wardens";
+                case SquadronType.Recon: return "far_eyes";
+                case SquadronType.Assault: return "storm_marines";
+                default: return "kestrel_interceptors";
+            }
+        }
+
+        /// <summary>One wing for a port, deterministic per seed and region, tier at most regionIndex + 1, not already carried.</summary>
+        public static List<string> OfferWings(int seed, int regionIndex, List<SquadronState> carried)
+        {
+            var random = SeededRandom.Seed(unchecked(seed + regionIndex * 4241), 0x7A1Bu);
+            var pool = new List<string>();
+            var weights = new List<int>();
+            foreach (var pair in Wings)
+            {
+                var alreadyCarried = false;
+                if (carried != null) for (var i = 0; i < carried.Count; i++) if (carried[i].wingId == pair.Key) alreadyCarried = true;
+                if (alreadyCarried || pair.Value.tier > regionIndex + 1) continue;
+                pool.Add(pair.Key);
+                weights.Add(pair.Value.tier <= regionIndex ? 3 : 1);
+            }
+            var offers = new List<string>();
+            if (pool.Count == 0) return offers;
+            var total = 0;
+            for (var i = 0; i < weights.Count; i++) total += weights[i];
+            var roll = SeededRandom.Range(ref random, 0, total);
+            var index = 0;
+            for (; index < weights.Count; index++)
+            {
+                if (roll < weights[index]) break;
+                roll -= weights[index];
+            }
+            offers.Add(pool[Math.Min(index, pool.Count - 1)]);
             return offers;
         }
 
@@ -509,19 +571,26 @@ namespace AetherArk.Content
         public static List<SquadronState> CreateSquadrons(string flagshipId)
         {
             var flagship = GetFlagship(flagshipId) ?? Flagships[0];
-            return new List<SquadronState>
+            var wings = flagship.startingWings ?? new[] { "kestrel_interceptors", "ember_bombers" };
+            var pilots = new[] { "crew_pilot", "crew_marine", "crew_engineer", "crew_medic" };
+            var result = new List<SquadronState>();
+            for (var i = 0; i < wings.Length; i++)
             {
-                new SquadronState
+                var wing = GetWing(wings[i]);
+                if (wing == null) continue;
+                var strength = wing.strength;
+                if (wing.type == SquadronType.Interceptor && i == 0) strength = Math.Max(strength, flagship.interceptorStrength);
+                if (wing.type == SquadronType.Bomber && i == 1) strength = Math.Max(strength, flagship.bomberStrength);
+                result.Add(new SquadronState
                 {
-                    id = "squad_kestrel", displayKey = "squadron.kestrel", type = SquadronType.Interceptor,
-                    strength = flagship.interceptorStrength, maxStrength = flagship.interceptorStrength, ordnanceCost = 1, pilotCrewId = "crew_pilot"
-                },
-                new SquadronState
-                {
-                    id = "squad_ember", displayKey = "squadron.ember", type = SquadronType.Bomber,
-                    strength = flagship.bomberStrength, maxStrength = flagship.bomberStrength, ordnanceCost = 2, pilotCrewId = "crew_marine"
-                }
-            };
+                    id = "squad_" + i, displayKey = wing.nameKey, type = wing.type, wingId = wing.id,
+                    strength = strength, maxStrength = strength, ordnanceCost = wing.ordnanceCost, pilotCrewId = pilots[Math.Min(i, pilots.Length - 1)]
+                });
+            }
+            // Keep the historic ids for the first two bays so saves, tests and shortcuts keep working.
+            if (result.Count > 0) result[0].id = "squad_kestrel";
+            if (result.Count > 1) result[1].id = "squad_ember";
+            return result;
         }
 
         private static readonly RegionDefinition[] Regions =

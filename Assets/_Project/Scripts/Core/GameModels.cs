@@ -106,6 +106,7 @@ namespace AetherArk.Core
         public string nameKey;
         public bool boardingCapable;
         public int moduleSlots = 4;
+        public int wingBays = 2;
         public int weaponHardpoints = 2;
         public List<WeaponSlotState> weaponSlots = new List<WeaponSlotState>();
         public float hull;
@@ -177,6 +178,7 @@ namespace AetherArk.Core
         public float missionTimer;
         public float phaseDuration;
         public string pilotCrewId;
+        public string wingId;
         public ShipSystemType targetSystem = ShipSystemType.Weapons;
 
         public bool CanLaunch => status == SquadronStatus.Ready && strength > 0;
@@ -241,6 +243,29 @@ namespace AetherArk.Core
     }
 
     [Serializable]
+    public sealed class WingDefinition
+    {
+        public string id;
+        public string nameKey;
+        public string descriptionKey;
+        public SquadronType type;
+        public int tier = 1;
+        public int cost = 12;
+        public int strength = 3;
+        public int ordnanceCost = 1;
+        public float missionTime = 1f;
+        public float lossResistance = 1f;
+        public int interceptCharges = 2;
+        public float bombardDamage = 1f;
+        public float bombardFire;
+        public float escortWard = 5f;
+        public int escortCharges = 1;
+        public float reconSeconds = 15f;
+        public float assaultSabotage = 32f;
+        public float assaultHull = 1f;
+    }
+
+    [Serializable]
     public sealed class FlagshipDefinition
     {
         public string id;
@@ -252,6 +277,8 @@ namespace AetherArk.Core
         public int weaponHardpoints = 2;
         public int moduleSlots = 4;
         public string[] startingWeapons;
+        public string[] startingWings;
+        public int wingBays = 2;
         public int interceptorStrength = 4;
         public int bomberStrength = 3;
         /// <summary>Power per system in enum order: Bridge, AetherCore, LiftArray, Engines, Ward, Weapons, FlightDeck, Sensors, Infirmary, LifeSupport.</summary>

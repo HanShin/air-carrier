@@ -490,6 +490,35 @@ namespace AetherArk.Runtime
                     new Vector2(18f, 4f), new Vector2(444f, 24f), UiFactory.Brass, UiFactory.Ink, 12);
                 buy.interactable = state.resources.salvage >= weapon.cost;
             }
+            var wingOffers = controller.Simulation.PortWingOffers();
+            if (wingOffers.Count > 0)
+            {
+                var wing = ContentCatalog.GetWing(wingOffers[0]);
+                ui.Text("PortWingTitle", panel, l10n.T("ui.port_wings"), 16, UiFactory.Brass, TextAnchor.MiddleLeft,
+                    new Vector2(1050f, 250f), new Vector2(400f, 30f), FontStyle.Bold);
+                var card = ui.PanelRect("WingOffer_" + wing.id, panel, new Vector2(1050f, 128f), new Vector2(480f, 116f), UiFactory.PanelSoft);
+                card.GetComponent<Image>().raycastTarget = false;
+                ui.Text("WingOfferName_" + wing.id, card, l10n.T(wing.nameKey), 18, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                    new Vector2(18f, 80f), new Vector2(300f, 30f), FontStyle.Bold);
+                ui.Text("WingOfferMeta_" + wing.id, card, $"{l10n.EnumName(wing.type)}  ·  {l10n.T("ui.tier", wing.tier.ToString())}  ·  {string.Format(l10n.T("ui.wing_meta"), wing.strength, wing.ordnanceCost)}", 12,
+                    UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(18f, 58f), new Vector2(440f, 22f));
+                ui.Text("WingOfferDesc_" + wing.id, card, l10n.T(wing.descriptionKey), 13, UiFactory.Aether, TextAnchor.UpperLeft,
+                    new Vector2(18f, 30f), new Vector2(440f, 28f));
+                var sameBay = state.squadrons.Find(sq => (ContentCatalog.GetWing(sq.wingId)?.type ?? sq.type) == wing.type);
+                var replacedWing = sameBay != null ? ContentCatalog.GetWing(sameBay.wingId) : state.squadrons.Count >= state.playerShip.wingBays && state.squadrons.Count > 0 ? ContentCatalog.GetWing(state.squadrons[state.squadrons.Count - 1].wingId) : null;
+                var wingLabel = $"{l10n.T("ui.buy")}  ·  {l10n.T("ui.salvage")} {wing.cost}" + (replacedWing != null ? $"   ({l10n.T("ui.replaces", l10n.T(replacedWing.nameKey))})" : string.Empty);
+                var localWing = wing.id;
+                var buyWing = ui.Button("BuyWing_" + wing.id, card, wingLabel, () => controller.PurchaseWing(localWing),
+                    new Vector2(18f, 4f), new Vector2(444f, 24f), UiFactory.Brass, UiFactory.Ink, 12);
+                buyWing.interactable = state.resources.salvage >= wing.cost;
+            }
+            var carried = new StringBuilder();
+            for (var i = 0; i < state.squadrons.Count; i++)
+            {
+                if (carried.Length > 0) carried.Append("  ·  ");
+                carried.Append(l10n.T(state.squadrons[i].displayKey)).Append(" ").Append(state.squadrons[i].maxStrength);
+            }
+
             var mounted = new StringBuilder();
             for (var i = 0; i < state.weaponSlots.Count; i++)
             {
@@ -497,8 +526,8 @@ namespace AetherArk.Runtime
                 if (mounted.Length > 0) mounted.Append("  ·  ");
                 mounted.Append(weapon == null ? state.weaponSlots[i].weaponId : l10n.T(weapon.nameKey));
             }
-            ui.Text("PortMounted", panel, $"{l10n.T("ui.weapons_title")}: {mounted}", 13, UiFactory.TextMuted, TextAnchor.MiddleLeft,
-                new Vector2(50f, 100f), new Vector2(900f, 24f));
+            ui.Text("PortMounted", panel, $"{l10n.T("ui.weapons_title")}: {mounted}     ·     {l10n.T("ui.wing_bays")}: {carried}", 13, UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                new Vector2(50f, 100f), new Vector2(1100f, 24f));
 
             var depart = ui.Button("DepartPort", panel, l10n.T("ui.port_depart"), ConfirmPort, new Vector2(1150f, 40f), new Vector2(400f, 70f), UiFactory.Brass, UiFactory.Ink, 20);
             depart.interactable = true;

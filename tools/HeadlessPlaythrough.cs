@@ -320,6 +320,15 @@ internal static class HeadlessPlaythrough
             var lastScore = last == null ? 0f : last.damage / last.cooldown;
             if (slots.Count < simulation.State.playerShip.weaponHardpoints || bestScore > lastScore * 1.2f) simulation.PurchaseWeapon(bestWeapon);
         }
+        // Finally a same-specialty wing upgrade when clearly better and affordable.
+        var wingOffers = simulation.PortWingOffers();
+        if (wingOffers.Count > 0)
+        {
+            var wing = ContentCatalog.GetWing(wingOffers[0]);
+            var current = simulation.State.squadrons.Find(sq => (ContentCatalog.GetWing(sq.wingId)?.type ?? sq.type) == wing.type);
+            var currentTier = current != null ? (ContentCatalog.GetWing(current.wingId)?.tier ?? 1) : 0;
+            if (wing != null && wing.tier > currentTier && simulation.State.resources.salvage >= wing.cost + 10) simulation.PurchaseWing(wing.id);
+        }
         simulation.DepartPort();
     }
 

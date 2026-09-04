@@ -42,7 +42,7 @@ Profile and suspended run saves are separate, schema-versioned JSON files writte
 | Early Access | 1 | 4 fully authored | 4 | ~50 | 6 / ~15 |
 | 1.0 | 3 | 6 | 6 + finale | 100+ | 12 / ~30 |
 
-Progress toward 1.0 (2026-09-03): 30 flagship modules, the between-region port shop, 18 mounted weapons with hardpoints and three flagships with progress unlocks are in; wings, the remaining silhouettes, regions 5–6 and events 51–100 follow.
+Progress toward 1.0 (2026-09-03): 30 flagship modules, the between-region port shop, 18 mounted weapons with hardpoints, three flagships with progress unlocks and nine air wings are in; the remaining silhouettes, regions 5–6 and events 51–100 follow.
 
 EA requires a completable 90–120 minute campaign, all core rule families, Korean/English parity, save migration fixtures, and Windows/macOS QA. Post-EA development adds content and balance without replacing the core state contracts.
 

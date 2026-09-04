@@ -1608,6 +1608,163 @@ namespace AetherArk.Tests
             finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         }
 
+        [Test]
+        public void WingLibrary_HasNineLocalizedValidWings()
+        {
+            var ids = ContentCatalog.WingIds();
+            Assert.That(ids.Count, Is.GreaterThanOrEqualTo(9));
+            var ko = new LocalizationService(Language.Korean);
+            var en = new LocalizationService(Language.English);
+            foreach (var id in ids)
+            {
+                var wing = ContentCatalog.GetWing(id);
+                Assert.That(ko.T(wing.nameKey), Is.Not.EqualTo(wing.nameKey), id);
+                Assert.That(en.T(wing.descriptionKey), Is.Not.EqualTo(wing.descriptionKey), id);
+                Assert.That(wing.strength, Is.GreaterThan(0), id);
+                Assert.That(wing.cost, Is.GreaterThan(0), id);
+                Assert.That(wing.missionTime, Is.GreaterThan(0f), id);
+                Assert.That(wing.lossResistance, Is.GreaterThan(0f).And.LessThanOrEqualTo(1f), id);
+            }
+        }
+
+        [Test]
+        public void Wings_DefaultPerFlagshipAndOldSavesAreBackfilled()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var vanguard = GameSimulation.NewRun(profile, 81).State;
+            Assert.That(vanguard.squadrons.ConvertAll(s => s.wingId), Is.EqualTo(new[] { "kestrel_interceptors", "ember_bombers" }));
+            Assert.That(vanguard.squadrons[0].displayKey, Is.EqualTo(ContentCatalog.GetWing("kestrel_interceptors").nameKey));
+
+            profile.campaignVictories = 1;
+            profile.flagshipId = "ship_zephyr";
+            var zephyr = GameSimulation.NewRun(profile, 82).State;
+            Assert.That(zephyr.squadrons.Count, Is.EqualTo(3), "the Zephyr carries three wings");
+            Assert.That(zephyr.squadrons[2].wingId, Is.EqualTo("far_eyes"));
+            Assert.That(zephyr.playerShip.wingBays, Is.EqualTo(3));
+
+            foreach (var squadron in vanguard.squadrons) squadron.wingId = null; // pre-wing save
+            GameSimulation.EnsureWings(vanguard);
+            Assert.That(vanguard.squadrons[0].wingId, Is.EqualTo("kestrel_interceptors"));
+            Assert.That(vanguard.squadrons[1].wingId, Is.EqualTo("ember_bombers"));
+        }
+
+        private static GameSimulation WingRun(string wingId, int bay = 0)
+        {
+            var simulation = RunAgainst("enemy_cutter");
+            var state = simulation.State;
+            IsolateFromOtherThreats(state);
+            state.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 0;
+            state.playerShip.GetSystem(ShipSystemType.FlightDeck).power = 3;
+            var wing = ContentCatalog.GetWing(wingId);
+            var squadron = state.squadrons[bay];
+            squadron.wingId = wingId; squadron.displayKey = wing.nameKey; squadron.type = wing.type;
+            squadron.strength = wing.strength; squadron.maxStrength = wing.strength; squadron.ordnanceCost = wing.ordnanceCost;
+            state.resources.ordnance = 20;
+            state.currentWeather = WeatherType.Clear;
+            simulation.SetPaused(false);
+            return simulation;
+        }
+
+        private static void FlyMission(GameSimulation simulation, int bay, SquadronMission mission, ShipSystemType target)
+        {
+            Assert.That(simulation.LaunchSquadron(simulation.State.squadrons[bay].id, mission, target).success, Is.True);
+            for (var i = 0; i < 120 && simulation.State.squadrons[bay].status != SquadronStatus.Ready && simulation.State.squadrons[bay].status != SquadronStatus.Destroyed; i++)
+                simulation.Tick(0.1f);
+        }
+
+        [Test]
+        public void Wings_UseTheirOwnOrdnanceCostAndInterceptCharges()
+        {
+            var simulation = WingRun("gale_lancers");
+            var state = simulation.State;
+            var wing = ContentCatalog.GetWing("gale_lancers");
+            var ordnanceBefore = state.resources.ordnance;
+            state.interceptCharges = 0;
+            FlyMission(simulation, 0, SquadronMission.Intercept, ShipSystemType.FlightDeck);
+            Assert.That(ordnanceBefore - state.resources.ordnance, Is.EqualTo(wing.ordnanceCost));
+            Assert.That(state.interceptCharges, Is.EqualTo(Math.Min(GameSimulation.MaxInterceptCharges, wing.interceptCharges)), "a wing's intercept sortie grants its own charges");
+        }
+
+        [Test]
+        public void Wings_BombardDamageEscortWardReconAndAssaultFollowTheWing()
+        {
+            var bomber = WingRun("thunder_bombers", 1);
+            var enemy = bomber.State.enemyShip;
+            enemy.ward = 0f; enemy.armor = 0f; enemy.hull = 100f; enemy.maxHull = 100f;
+            enemy.GetSystem(ShipSystemType.Ward).power = 0; // no ward regrowth during the sortie
+            var wing = ContentCatalog.GetWing("thunder_bombers");
+            FlyMission(bomber, 1, SquadronMission.Bombard, ShipSystemType.Weapons);
+            var expected = (6f + bomber.State.squadrons[1].strength) * wing.bombardDamage;
+            Assert.That(100f - enemy.hull, Is.EqualTo(expected).Within(0.05f).Or.GreaterThan(expected - 0.05f), "bombard damage scales by the wing multiplier (plus any weapon fire)");
+
+            var escort = WingRun("sky_wardens");
+            var ship = escort.State.playerShip;
+            ship.GetSystem(ShipSystemType.Ward).power = 0; ship.ward = 0f;
+            escort.State.interceptCharges = 0;
+            FlyMission(escort, 0, SquadronMission.Escort, ShipSystemType.FlightDeck);
+            Assert.That(ship.ward, Is.EqualTo(ContentCatalog.GetWing("sky_wardens").escortWard).Within(0.001f));
+            Assert.That(escort.State.interceptCharges, Is.EqualTo(ContentCatalog.GetWing("sky_wardens").escortCharges));
+
+            var recon = WingRun("far_eyes");
+            FlyMission(recon, 0, SquadronMission.Recon, ShipSystemType.Sensors);
+            Assert.That(recon.State.reconBonusSeconds, Is.GreaterThan(15f).And.LessThanOrEqualTo(ContentCatalog.GetWing("far_eyes").reconSeconds));
+
+            var assault = WingRun("storm_marines");
+            var target = assault.State.enemyShip.GetSystem(ShipSystemType.Ward);
+            target.damage = 0f;
+            FlyMission(assault, 0, SquadronMission.Assault, ShipSystemType.Ward);
+            Assert.That(target.damage, Is.EqualTo(ContentCatalog.GetWing("storm_marines").assaultSabotage).Within(0.001f));
+        }
+
+        [Test]
+        public void Wings_LossResistanceScalesTheLossRoll()
+        {
+            var lossesFragile = 0; var lossesTough = 0;
+            for (var seed = 1; seed <= 60; seed++)
+            {
+                foreach (var pair in new[] { ("kestrel_interceptors", 0), ("ghost_kites", 1) })
+                {
+                    var simulation = WingRun(pair.Item1);
+                    simulation.State.random.combat = SeededRandom.Seed(seed, 0xC0B47u);
+                    simulation.State.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 2; // raise the base loss chance
+                    var before = simulation.State.squadrons[0].strength;
+                    FlyMission(simulation, 0, SquadronMission.Intercept, ShipSystemType.FlightDeck);
+                    if (simulation.State.squadrons[0].strength < before) { if (pair.Item2 == 0) lossesFragile++; else lossesTough++; }
+                }
+            }
+            Assert.That(lossesTough, Is.LessThan(lossesFragile), "loss resistance should reduce attrition over many sorties");
+        }
+
+        [Test]
+        public void Port_SellsWingsIntoBaysReplacingTheSameSpecialtyWithARefund()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 607);
+            var state = simulation.State;
+            simulation.BeginCombat(2, true);
+            WinCurrentBattle(simulation);
+            Assert.That(state.phase, Is.EqualTo(GamePhase.Port));
+            var offer = simulation.PortWingOffers();
+            Assert.That(offer.Count, Is.EqualTo(1));
+            Assert.That(offer, Is.EqualTo(simulation.PortWingOffers()), "offers are deterministic");
+
+            state.resources.salvage = 200;
+            var wing = ContentCatalog.GetWing(offer[0]);
+            var sameSpecialty = state.squadrons.FindIndex(s => ContentCatalog.GetWing(s.wingId).type == wing.type);
+            var replacedIndex = sameSpecialty >= 0 ? sameSpecialty : state.squadrons.Count - 1;
+            var replaced = ContentCatalog.GetWing(state.squadrons[replacedIndex].wingId);
+            var pilot = state.squadrons[replacedIndex].pilotCrewId;
+            var salvageBefore = state.resources.salvage;
+            Assert.That(simulation.PurchaseWing(offer[0]).success, Is.True);
+            Assert.That(state.squadrons[replacedIndex].wingId, Is.EqualTo(offer[0]));
+            Assert.That(state.squadrons[replacedIndex].pilotCrewId, Is.EqualTo(pilot), "the bay keeps its pilot");
+            Assert.That(state.squadrons[replacedIndex].strength, Is.EqualTo(wing.strength));
+            Assert.That(state.resources.salvage, Is.EqualTo(salvageBefore - wing.cost + replaced.cost / 2));
+            Assert.That(simulation.PurchaseWing(offer[0]).success, Is.False, "already carried");
+        }
+
         [TestCase(WeatherType.Thunderhead, -0.08f)]
         [TestCase(WeatherType.Turbulence, -0.12f)]
         [TestCase(WeatherType.AetherCurrent, 0.04f)]

@@ -37,6 +37,7 @@ namespace AetherArk.Core
             };
 
             EnsureLoadout(state);
+            EnsureWings(state);
             if (profile.tutorialSeen) ContentCatalog.AssignEncounterVariants(state.routeNodes, seed);
 
             if (profile.difficulty == Difficulty.Story)
@@ -71,6 +72,29 @@ namespace AetherArk.Core
                     state.weaponSlots.Add(new WeaponSlotState { weaponId = ContentCatalog.StartingSecondary });
             }
             if (state.playerShip != null && state.playerShip.weaponHardpoints < 1) state.playerShip.weaponHardpoints = 2;
+        }
+
+        /// <summary>Gives squadrons from saves that predate wings the default wing of their specialty.</summary>
+        public static void EnsureWings(RunState state)
+        {
+            if (state?.squadrons == null) return;
+            for (var i = 0; i < state.squadrons.Count; i++)
+            {
+                var squadron = state.squadrons[i];
+                if (ContentCatalog.GetWing(squadron.wingId) != null) continue;
+                var wing = ContentCatalog.GetWing(ContentCatalog.DefaultWingFor(squadron.type));
+                if (wing == null) continue;
+                squadron.wingId = wing.id;
+                squadron.displayKey = wing.nameKey;
+                if (squadron.maxStrength <= 0) { squadron.maxStrength = wing.strength; squadron.strength = wing.strength; }
+                squadron.ordnanceCost = wing.ordnanceCost;
+            }
+            if (state.playerShip != null && state.playerShip.wingBays < 1) state.playerShip.wingBays = 2;
+        }
+
+        private static WingDefinition WingOf(SquadronState squadron)
+        {
+            return ContentCatalog.GetWing(squadron.wingId) ?? ContentCatalog.GetWing(ContentCatalog.DefaultWingFor(squadron.type));
         }
 
         public CommandResult Execute(IGameCommand command)
@@ -272,6 +296,45 @@ namespace AetherArk.Core
             }
             AddLog("log.weapon_mounted", weapon.nameKey);
             return CommandResult.Ok("command.weapon_bought");
+        }
+
+        public List<string> PortWingOffers()
+        {
+            return ContentCatalog.OfferWings(State.seed, State.regionIndex, State.squadrons);
+        }
+
+        /// <summary>Embarks a wing into the bay of the same specialty (else the last bay), refunding half of the old wing; the pilot stays with the bay.</summary>
+        public CommandResult PurchaseWing(string wingId)
+        {
+            if (State.phase != GamePhase.Port) return CommandResult.Fail("command.port_only");
+            var wing = ContentCatalog.GetWing(wingId);
+            if (wing == null) return CommandResult.Fail("command.wing_unknown");
+            for (var i = 0; i < State.squadrons.Count; i++) if (State.squadrons[i].wingId == wingId) return CommandResult.Fail("command.wing_carried");
+            if (State.resources.salvage < wing.cost) return CommandResult.Fail("command.module_cost");
+            State.resources.salvage -= wing.cost;
+            var bay = State.squadrons.FindIndex(s => WingOf(s)?.type == wing.type);
+            if (bay < 0 && State.squadrons.Count < State.playerShip.wingBays)
+            {
+                State.squadrons.Add(new SquadronState { id = "squad_" + State.squadrons.Count, pilotCrewId = "crew_engineer" });
+                bay = State.squadrons.Count - 1;
+            }
+            else
+            {
+                if (bay < 0) bay = State.squadrons.Count - 1;
+                var old = WingOf(State.squadrons[bay]);
+                if (old != null) State.resources.salvage += old.cost / 2;
+            }
+            var squadron = State.squadrons[bay];
+            squadron.wingId = wing.id;
+            squadron.displayKey = wing.nameKey;
+            squadron.type = wing.type;
+            squadron.strength = wing.strength;
+            squadron.maxStrength = wing.strength;
+            squadron.ordnanceCost = wing.ordnanceCost;
+            squadron.status = SquadronStatus.Ready;
+            squadron.mission = SquadronMission.None;
+            AddLog("log.wing_embarked", wing.nameKey);
+            return CommandResult.Ok("command.wing_bought");
         }
 
         public CommandResult DepartPort()
@@ -833,15 +896,17 @@ namespace AetherArk.Core
             var squadron = State.squadrons.Find(item => item.id == squadronId);
             if (deck == null || deck.EffectivePower <= 0) return CommandResult.Fail("command.deck_unpowered");
             if (squadron == null || !squadron.CanLaunch) return CommandResult.Fail("command.squadron_unavailable");
-            if (State.resources.ordnance < squadron.ordnanceCost) return CommandResult.Fail("command.no_ordnance");
+            var wing = WingOf(squadron);
+            var cost = wing != null ? wing.ordnanceCost : squadron.ordnanceCost;
+            if (State.resources.ordnance < cost) return CommandResult.Fail("command.no_ordnance");
             if (mission == SquadronMission.None || mission == SquadronMission.Recall) return CommandResult.Fail("command.invalid_mission");
 
-            State.resources.ordnance -= squadron.ordnanceCost;
+            State.resources.ordnance -= cost;
             State.hasLaunchedSquadron = true;
             squadron.mission = mission;
             squadron.targetSystem = target;
             squadron.status = SquadronStatus.Launching;
-            squadron.missionTimer = Math.Max(0.8f, 2.2f - deck.EffectivePower * 0.3f) * ModuleRules.Modifiers(State).squadronTime;
+            squadron.missionTimer = Math.Max(0.8f, 2.2f - deck.EffectivePower * 0.3f) * ModuleRules.Modifiers(State).squadronTime * (wing?.missionTime ?? 1f);
             squadron.phaseDuration = squadron.missionTimer;
             var pilot = State.crew.Find(crew => crew.id == squadron.pilotCrewId);
             if (pilot != null) pilot.onSortie = true;
@@ -862,7 +927,7 @@ namespace AetherArk.Core
                 if (squadron.status == SquadronStatus.Launching)
                 {
                     squadron.status = SquadronStatus.OnMission;
-                    squadron.missionTimer = 4.5f * weather.squadronTimeModifier;
+                    squadron.missionTimer = 4.5f * weather.squadronTimeModifier * (WingOf(squadron)?.missionTime ?? 1f);
                     squadron.phaseDuration = squadron.missionTimer;
                     AddLog("log.squadron_on_mission", squadron.displayKey);
                     RaiseCombatAlert("alert.squadron_on_mission", squadron.displayKey, AlertSeverity.Info, false);
@@ -873,7 +938,7 @@ namespace AetherArk.Core
                     if (squadron.status != SquadronStatus.Destroyed)
                     {
                         squadron.status = SquadronStatus.Recovering;
-                        squadron.missionTimer = 2.3f * weather.squadronTimeModifier;
+                        squadron.missionTimer = 2.3f * weather.squadronTimeModifier * (WingOf(squadron)?.missionTime ?? 1f);
                         squadron.phaseDuration = squadron.missionTimer;
                         AddLog("log.squadron_returning", squadron.displayKey);
                         RaiseCombatAlert("alert.squadron_returning", squadron.displayKey, AlertSeverity.Info, false);
@@ -897,26 +962,31 @@ namespace AetherArk.Core
             switch (squadron.mission)
             {
                 case SquadronMission.Intercept:
-                    State.interceptCharges += 2;
+                    State.interceptCharges = Math.Min(MaxInterceptCharges, State.interceptCharges + (WingOf(squadron)?.interceptCharges ?? 2));
                     AddLog("log.intercept_ready", squadron.displayKey);
                     break;
                 case SquadronMission.Bombard:
-                    ApplyDamage(State.enemyShip, squadron.targetSystem, 6f + squadron.strength, false);
+                {
+                    var bombWing = WingOf(squadron);
+                    ApplyDamage(State.enemyShip, squadron.targetSystem, (6f + squadron.strength) * (bombWing?.bombardDamage ?? 1f), false);
+                    var targetRoom = State.enemyShip.GetRoom(squadron.targetSystem);
+                    if (targetRoom != null && bombWing != null && bombWing.bombardFire > 0f) targetRoom.fire = Math.Min(100f, targetRoom.fire + bombWing.bombardFire);
                     AddLog("log.bombardment", squadron.targetSystem.ToString());
                     break;
+                }
                 case SquadronMission.Escort:
-                    State.playerShip.ward = Math.Min(State.playerShip.maxWard, State.playerShip.ward + 5f);
-                    State.interceptCharges++;
+                    State.playerShip.ward = Math.Min(State.playerShip.maxWard, State.playerShip.ward + (WingOf(squadron)?.escortWard ?? 5f));
+                    State.interceptCharges = Math.Min(MaxInterceptCharges, State.interceptCharges + (WingOf(squadron)?.escortCharges ?? 1));
                     AddLog("log.escort_ready", squadron.displayKey);
                     break;
                 case SquadronMission.Recon:
-                    State.reconBonusSeconds = 15f;
+                    State.reconBonusSeconds = WingOf(squadron)?.reconSeconds ?? 15f;
                     AddLog("log.recon_ready", squadron.displayKey);
                     break;
                 case SquadronMission.Assault:
                     var system = State.enemyShip.GetSystem(squadron.targetSystem);
-                    if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + 32f + ModuleRules.Modifiers(State).assaultBonus);
-                    State.enemyShip.hull = Math.Max(0f, State.enemyShip.hull - 1f);
+                    if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + (WingOf(squadron)?.assaultSabotage ?? 32f) + ModuleRules.Modifiers(State).assaultBonus);
+                    State.enemyShip.hull = Math.Max(0f, State.enemyShip.hull - (WingOf(squadron)?.assaultHull ?? 1f));
                     AddLog("log.assault", squadron.targetSystem.ToString());
                     break;
             }
@@ -925,6 +995,7 @@ namespace AetherArk.Core
             var enemyDeck = State.enemyShip?.GetSystem(ShipSystemType.FlightDeck);
             var lossChance = 0.14f + (enemyDeck?.EffectivePower ?? 0) * 0.035f;
             if (State.currentWeather == WeatherType.Turbulence || State.currentWeather == WeatherType.Icing) lossChance += 0.1f;
+            lossChance *= WingOf(squadron)?.lossResistance ?? 1f;
             if (SeededRandom.Chance(ref random, lossChance))
             {
                 squadron.strength--;

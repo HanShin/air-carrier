@@ -48,6 +48,7 @@ namespace AetherArk.Content
             AddEncounterStrings();
             AddModuleStrings();
             AddWeaponStrings();
+            AddWingStrings();
             Add("game.title", "에테르 아크", "AETHER ARK");
             Add("game.subtitle", "천공 피난선단 지휘 프로토타입", "Sky Convoy Command Prototype");
             Add("menu.new_run", "새 원정", "New Expedition");
@@ -114,6 +115,13 @@ namespace AetherArk.Content
             Add("ui.port_body", "천공문을 통과했습니다. 선단은 수리와 재보급을 마쳤고, 조선소가 기함 개장 모듈을 제안합니다.", "You are through the gate. The convoy is repaired and resupplied, and the yard offers flagship modules.");
             Add("ui.port_offers", "제안 모듈", "OFFERED MODULES");
             Add("ui.port_weapons", "제안 무기", "OFFERED WEAPONS");
+            Add("ui.port_wings", "제안 편대", "OFFERED WING");
+            Add("ui.wing_bays", "편대", "Wings");
+            Add("ui.wing_meta", "{0}기 · 군수품 {1}", "{0} craft · {1} ordnance");
+            Add("command.wing_unknown", "알 수 없는 편대입니다.", "Unknown wing.");
+            Add("command.wing_carried", "이미 보유한 편대입니다.", "That wing is already aboard.");
+            Add("command.wing_bought", "편대를 배치했습니다.", "Wing embarked.");
+            Add("log.wing_embarked", "{0} 배치 완료.", "{0} embarked.");
             Add("ui.weapons_title", "무장 슬롯", "WEAPONS");
             Add("ui.fire_all", "일제 사격", "Fire all");
             Add("ui.unpowered_weapon", "전력 부족", "Unpowered");
@@ -389,6 +397,11 @@ namespace AetherArk.Content
             Add("enum.squadronstatus.onmission", "임무 수행", "On mission");
             Add("enum.squadronstatus.recovering", "귀환 중", "Recovering");
             Add("enum.squadronstatus.destroyed", "전멸", "Destroyed");
+            Add("enum.squadrontype.interceptor", "요격기", "Interceptor");
+            Add("enum.squadrontype.bomber", "폭격기", "Bomber");
+            Add("enum.squadrontype.escort", "호위기", "Escort");
+            Add("enum.squadrontype.recon", "정찰기", "Recon");
+            Add("enum.squadrontype.assault", "강습정", "Assault");
             Add("enum.squadronmission.intercept", "요격", "Intercept");
             Add("enum.squadronmission.bombard", "폭격", "Bombard");
             Add("enum.squadronmission.escort", "호위", "Escort");
