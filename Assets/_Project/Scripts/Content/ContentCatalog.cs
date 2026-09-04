@@ -634,9 +634,9 @@ namespace AetherArk.Content
             new RegionDefinition { id = "imperial_cordon", nameKey = "region.imperial_cordon", index = 4,
                 weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.5f, enemyDamageMultiplier = 1.28f, extraAetherCostChance = 0.35f },
             new RegionDefinition { id = "abyssal_strait", nameKey = "region.abyssal_strait", index = 5,
-                weatherWeights = new[] { 1, 1, 4, 4, 1, 1 }, encounterWeights = new[] { 36, 10, 20, 6, 8, 20 }, enemyStatMultiplier = 1.7f, enemyDamageMultiplier = 1.45f, extraAetherCostChance = 0.4f },
+                weatherWeights = new[] { 1, 1, 4, 4, 1, 1 }, encounterWeights = new[] { 36, 10, 20, 6, 8, 20 }, enemyStatMultiplier = 1.7f, enemyDamageMultiplier = 1.5f, extraAetherCostChance = 0.4f },
             new RegionDefinition { id = "sky_throne", nameKey = "region.sky_throne", index = 6,
-                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 44, 6, 8, 8, 28, 6 }, enemyStatMultiplier = 1.9f, enemyDamageMultiplier = 1.6f, extraAetherCostChance = 0.45f }
+                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 44, 6, 8, 8, 28, 6 }, enemyStatMultiplier = 1.9f, enemyDamageMultiplier = 1.7f, extraAetherCostChance = 0.45f }
         };
 
         public static int RegionCount => Regions.Length;
@@ -752,12 +752,24 @@ namespace AetherArk.Content
         /// <summary>Authored event ids for a type, in a stable order (baseline event first).</summary>
         public static List<string> EncounterIds(EncounterType type)
         {
+            return EncounterIds(type, 0);
+        }
+
+        /// <summary>Event ids for a type, restricted to those allowed in the region (0 = every event).</summary>
+        public static List<string> EncounterIds(EncounterType type, int regionIndex)
+        {
             var ids = new List<string>();
             var baseline = EncounterIdFor(type);
-            if (!string.IsNullOrEmpty(baseline) && Encounters.ContainsKey(baseline)) ids.Add(baseline);
+            if (!string.IsNullOrEmpty(baseline) && Encounters.ContainsKey(baseline) && AllowedIn(Encounters[baseline], regionIndex)) ids.Add(baseline);
             foreach (var pair in Encounters)
-                if (pair.Value.type == type && pair.Key != baseline) ids.Add(pair.Key);
+                if (pair.Value.type == type && pair.Key != baseline && AllowedIn(pair.Value, regionIndex)) ids.Add(pair.Key);
             return ids;
+        }
+
+        private static bool AllowedIn(EncounterDefinition encounter, int regionIndex)
+        {
+            if (regionIndex <= 0 || encounter.regions == null || encounter.regions.Length == 0) return true;
+            return Array.IndexOf(encounter.regions, regionIndex) >= 0;
         }
 
         /// <summary>
@@ -766,12 +778,17 @@ namespace AetherArk.Content
         /// </summary>
         public static void AssignEncounterVariants(List<RouteNodeState> nodes, int seed)
         {
+            AssignEncounterVariants(nodes, seed, 1);
+        }
+
+        public static void AssignEncounterVariants(List<RouteNodeState> nodes, int seed, int regionIndex)
+        {
             var random = SeededRandom.Seed(seed, 0x5E1EC7u);
             var pools = new Dictionary<EncounterType, List<string>>();
             for (var i = 0; i < nodes.Count; i++)
             {
                 var node = nodes[i];
-                var all = EncounterIds(node.encounterType);
+                var all = EncounterIds(node.encounterType, regionIndex);
                 if (all.Count == 0) continue;
                 if (!pools.TryGetValue(node.encounterType, out var pool) || pool.Count == 0)
                 {

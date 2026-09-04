@@ -689,10 +689,52 @@ namespace AetherArk.Tests
             { EncounterType.Rescue, EncounterType.Salvage, EncounterType.Trade, EncounterType.Checkpoint, EncounterType.Storm };
 
         [Test]
-        public void EventLibrary_HasAtLeastTenEventsPerType()
+        public void EventLibrary_HasAtLeastTwentyEventsPerTypeAndRegionTaggedOnes()
         {
+            var tagged = 0;
             foreach (var type in EventTypes)
-                Assert.That(ContentCatalog.EncounterIds(type).Count, Is.GreaterThanOrEqualTo(10), type.ToString());
+            {
+                Assert.That(ContentCatalog.EncounterIds(type).Count, Is.GreaterThanOrEqualTo(20), type.ToString());
+                foreach (var id in ContentCatalog.EncounterIds(type))
+                {
+                    var encounter = ContentCatalog.GetEncounter(id);
+                    if (encounter.regions != null && encounter.regions.Length > 0)
+                    {
+                        tagged++;
+                        foreach (var region in encounter.regions) Assert.That(region, Is.InRange(1, ContentCatalog.RegionCount), id);
+                    }
+                }
+            }
+            Assert.That(tagged, Is.GreaterThanOrEqualTo(8));
+        }
+
+        [Test]
+        public void EventAssignment_HonoursRegionTags()
+        {
+            string taggedId = null; int[] taggedRegions = null;
+            foreach (var type in EventTypes)
+            foreach (var id in ContentCatalog.EncounterIds(type))
+            {
+                var encounter = ContentCatalog.GetEncounter(id);
+                if (encounter.regions != null && encounter.regions.Length > 0 && encounter.regions.Length < ContentCatalog.RegionCount) { taggedId = id; taggedRegions = encounter.regions; break; }
+            }
+            Assert.That(taggedId, Is.Not.Null);
+            var inside = Array.IndexOf(taggedRegions, 1) >= 0 ? 1 : taggedRegions[0];
+            var outside = 1;
+            while (Array.IndexOf(taggedRegions, outside) >= 0) outside++;
+
+            var seenInside = false; var seenOutside = false;
+            for (var seed = 1; seed <= 300; seed++)
+            {
+                var insideNodes = ContentCatalog.CreateRoute(seed * 13, inside);
+                ContentCatalog.AssignEncounterVariants(insideNodes, seed * 13, inside);
+                if (insideNodes.Exists(node => node.encounterId == taggedId)) seenInside = true;
+                var outsideNodes = ContentCatalog.CreateRoute(seed * 13, outside);
+                ContentCatalog.AssignEncounterVariants(outsideNodes, seed * 13, outside);
+                if (outsideNodes.Exists(node => node.encounterId == taggedId)) seenOutside = true;
+            }
+            Assert.That(seenInside, Is.True, taggedId + " should appear in region " + inside);
+            Assert.That(seenOutside, Is.False, taggedId + " must not appear in region " + outside);
         }
 
         [Test]

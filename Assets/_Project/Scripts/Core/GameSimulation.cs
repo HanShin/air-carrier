@@ -846,7 +846,7 @@ namespace AetherArk.Core
 
         public float EnemyDamageMultiplier()
         {
-            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.66f : State.difficulty == Difficulty.Harsh ? 1.25f : 1f;
+            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.66f : State.difficulty == Difficulty.Harsh ? 1.3f : 1f;
             return difficultyMultiplier * ContentCatalog.GetRegion(State.regionIndex).enemyDamageMultiplier;
         }
 
@@ -1265,7 +1265,7 @@ namespace AetherArk.Core
         {
             State.regionIndex++;
             State.routeNodes = ContentCatalog.CreateRoute(State.seed, State.regionIndex);
-            if (!State.isFirstExpedition) ContentCatalog.AssignEncounterVariants(State.routeNodes, unchecked(State.seed + State.regionIndex * 104729));
+            if (!State.isFirstExpedition) ContentCatalog.AssignEncounterVariants(State.routeNodes, unchecked(State.seed + State.regionIndex * 104729), State.regionIndex);
             State.travelCount = 0;
             State.stormColumn = -1;
             State.currentNodeId = "n0_1";

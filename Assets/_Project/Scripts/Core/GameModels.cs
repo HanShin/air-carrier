@@ -241,6 +241,8 @@ namespace AetherArk.Core
         public string titleKey;
         public string bodyKey;
         public EncounterType type;
+        /// <summary>Regions this event may appear in; empty means any region.</summary>
+        public int[] regions = new int[0];
         public List<EncounterChoiceDefinition> choices = new List<EncounterChoiceDefinition>();
     }
 

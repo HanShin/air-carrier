@@ -38,11 +38,11 @@ Profile and suspended run saves are separate, schema-versioned JSON files writte
 
 | Milestone | Flagships | Lineages | Regions | Events | Enemy silhouettes/configs |
 |---|---:|---:|---:|---:|---:|
-| Vertical slice | 1 | 6 represented | 6 + finale (tutorial: 1) | 50 authored events | 12 / 30 |
+| Vertical slice | 1 | 6 represented | 6 + finale (tutorial: 1) | 100 authored events | 12 / 30 |
 | Early Access | 1 | 4 fully authored | 4 | ~50 | 6 / ~15 |
 | 1.0 | 3 | 6 | 6 + finale | 100+ | 12 / ~30 |
 
-Progress toward 1.0 (2026-09-03): 30 flagship modules, the between-region port shop, 18 mounted weapons with hardpoints, three flagships with progress unlocks, nine air wings, twelve enemy silhouettes with thirty region-gated configs, six regions and the Gate Warden finale are in; events 51–100 and fully authored lineages follow.
+Progress toward 1.0 (2026-09-03): 30 flagship modules, the between-region port shop, 18 mounted weapons with hardpoints, three flagships with progress unlocks, nine air wings, twelve enemy silhouettes with thirty region-gated configs, six regions, the Gate Warden finale and one hundred events with region tags are in; fully authored lineages follow.
 
 EA requires a completable 90–120 minute campaign, all core rule families, Korean/English parity, save migration fixtures, and Windows/macOS QA. Post-EA development adds content and balance without replacing the core state contracts.
 
@@ -51,5 +51,5 @@ EA requires a completable 90–120 minute campaign, all core rule families, Kore
 - Ship operations, wings, and altitude/weather each create distinct meaningful decisions in a 20–30 minute slice.
 - All critical warnings identify the threatened crew, compartment, resource, or convoy condition and can auto-pause.
 - No event choice can spend unavailable resources; no blocked node can be entered; no save can resume an already-ended run.
-- Standard difficulty targets a 25–40% experienced win rate after sufficient EA data. Story targets 60%+, Harsh 10–20%. The headless autoplayer (a competent but not expert proxy) currently lands at 39% / 59% / 13% on the Dawn Refuge over the six-region campaign (difficulty firepower 0.66 / 1.0 / 1.25 and toughness 0.9 / 1.0 / 1.15); the Iron Bastion sits at 46% and the Zephyr Kite at 5% on Standard, the latter a known gap because the autoplayer never exploits wings, with losses spread across regions 1, 2 and 4 rather than front-loaded. Known residual: the bulwark monitor remains easier than the storm cruiser at the gate (93% vs 70% autoplayer wins); human playtests should decide whether that gap is a feature of the roster or a defect.
+- Standard difficulty targets a 25–40% experienced win rate after sufficient EA data. Story targets 60%+, Harsh 10–20%. The headless autoplayer (a competent but not expert proxy) currently lands at 44% / 60% / 14% on the Dawn Refuge over the six-region campaign (difficulty firepower 0.66 / 1.0 / 1.3 and toughness 0.9 / 1.0 / 1.15; region firepower up to 1.7); the Iron Bastion sits at 32% and the Zephyr Kite at 6% on Standard, the latter a known gap because the autoplayer never exploits wings, with losses spread across regions 1, 2 and 4 rather than front-loaded. Known residual: the bulwark monitor remains easier than the storm cruiser at the gate (93% vs 70% autoplayer wins); human playtests should decide whether that gap is a feature of the roster or a defect.
 - Windows and macOS builds must share seeds and save payloads and maintain 60 fps at the locked 1920×1080 reference layout before the slice is promoted to EA production.
