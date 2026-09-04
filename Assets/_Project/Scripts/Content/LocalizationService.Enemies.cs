@@ -29,6 +29,7 @@ namespace AetherArk.Content
             Add("ship.enemy_hive_swarm", "제국 떼벌 항모", "Imperial Swarm Carrier");
             Add("ship.enemy_wraith", "제국 망령함", "Imperial Wraith");
             Add("ship.enemy_wraith_ghost", "제국 유령 망령함", "Imperial Ghost Wraith");
+            Add("ship.enemy_gate_warden", "천공문 수호함 \"불멸의 서약\"", "Gate Warden \"Undying Oath\"");
         }
     }
 }

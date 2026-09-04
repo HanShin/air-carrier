@@ -14,7 +14,7 @@ namespace AetherArk.Content
             {
                 id = "ship_vanguard", startingWings = new[] { "kestrel_interceptors", "ember_bombers" }, wingBays = 2, nameKey = "flagship.ship_vanguard", descriptionKey = "flagship.ship_vanguard.desc", displayName = "EAS Dawn Refuge",
                 hull = 32f, armor = 18f, ward = 12f, coreOutput = 12, weaponHardpoints = 2, moduleSlots = 4,
-                startingWeapons = new[] { "aether_cannon" }, interceptorStrength = 4, bomberStrength = 3,
+                startingWeapons = new[] { "aether_cannon", "ward_lance" }, interceptorStrength = 4, bomberStrength = 3,
                 power = new[] { 1, 0, 1, 2, 2, 2, 1, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 4, 4, 3, 3, 2, 2 }
             },
             new FlagshipDefinition
@@ -27,9 +27,9 @@ namespace AetherArk.Content
             new FlagshipDefinition
             {
                 id = "ship_zephyr", startingWings = new[] { "kestrel_interceptors", "ember_bombers", "far_eyes" }, wingBays = 3, nameKey = "flagship.ship_zephyr", descriptionKey = "flagship.ship_zephyr.desc", displayName = "EAS Zephyr Kite",
-                hull = 32f, armor = 14f, ward = 16f, coreOutput = 14, weaponHardpoints = 2, moduleSlots = 4,
+                hull = 34f, armor = 18f, ward = 16f, coreOutput = 14, weaponHardpoints = 2, moduleSlots = 4,
                 startingWeapons = new[] { "aether_cannon", "ward_lance" }, interceptorStrength = 5, bomberStrength = 3,
-                power = new[] { 1, 0, 1, 3, 2, 2, 3, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 4, 3, 2, 2 }
+                power = new[] { 1, 0, 1, 2, 2, 3, 3, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 4, 3, 2, 2 }
             }
         };
 
@@ -441,6 +441,13 @@ namespace AetherArk.Content
                 Tile(ShipSystemType.Sensors, 3, 0, 2, 1), Tile(ShipSystemType.Weapons, 3, 1), Tile(ShipSystemType.Infirmary, 4, 1),
                 Tile(ShipSystemType.Bridge, 5, 0), Tile(ShipSystemType.FlightDeck, 5, 1));
 
+            plans["enemy_warden"] = Plan("enemy_warden", 7, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 3),
+                Tile(ShipSystemType.LiftArray, 1, 0), Tile(ShipSystemType.AetherCore, 1, 1), Tile(ShipSystemType.LifeSupport, 1, 2),
+                Tile(ShipSystemType.Ward, 2, 0, 2, 1), Tile(ShipSystemType.Weapons, 2, 1, 2, 2),
+                Tile(ShipSystemType.FlightDeck, 4, 0, 2, 2), Tile(ShipSystemType.Infirmary, 4, 2), Tile(ShipSystemType.Sensors, 5, 2),
+                Tile(ShipSystemType.Bridge, 6, 0, 1, 3));
+
             plans["enemy_cutter"] = Plan("enemy_cutter", 5, 2,
                 Tile(ShipSystemType.Engines, 0, 0),
                 Tile(ShipSystemType.AetherCore, 1, 0),
@@ -619,13 +626,17 @@ namespace AetherArk.Content
         {
             // Region 1 reproduces the legacy rolls exactly: weather total 6 (uniform), encounters 38/15/15/11/11/10.
             new RegionDefinition { id = "dawn_archipelago", nameKey = "region.dawn_archipelago", index = 1,
-                weatherWeights = new[] { 1, 1, 1, 1, 1, 1 }, encounterWeights = new[] { 38, 15, 15, 11, 11, 10 }, enemyStatMultiplier = 1f, extraAetherCostChance = 0.2f },
+                weatherWeights = new[] { 1, 1, 1, 1, 1, 1 }, encounterWeights = new[] { 38, 15, 15, 11, 11, 10 }, enemyStatMultiplier = 1f, enemyDamageMultiplier = 1f, extraAetherCostChance = 0.2f },
             new RegionDefinition { id = "storm_corridor", nameKey = "region.storm_corridor", index = 2,
-                weatherWeights = new[] { 1, 4, 4, 1, 1, 1 }, encounterWeights = new[] { 36, 12, 13, 6, 9, 24 }, enemyStatMultiplier = 1.12f, extraAetherCostChance = 0.25f },
+                weatherWeights = new[] { 1, 4, 4, 1, 1, 1 }, encounterWeights = new[] { 36, 12, 13, 6, 9, 24 }, enemyStatMultiplier = 1.12f, enemyDamageMultiplier = 1.08f, extraAetherCostChance = 0.25f },
             new RegionDefinition { id = "icefield_heights", nameKey = "region.icefield_heights", index = 3,
-                weatherWeights = new[] { 1, 1, 1, 1, 4, 4 }, encounterWeights = new[] { 34, 22, 22, 8, 6, 8 }, enemyStatMultiplier = 1.38f, extraAetherCostChance = 0.3f },
+                weatherWeights = new[] { 1, 1, 1, 1, 4, 4 }, encounterWeights = new[] { 34, 22, 22, 8, 6, 8 }, enemyStatMultiplier = 1.3f, enemyDamageMultiplier = 1.18f, extraAetherCostChance = 0.3f },
             new RegionDefinition { id = "imperial_cordon", nameKey = "region.imperial_cordon", index = 4,
-                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.6f, extraAetherCostChance = 0.35f }
+                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 42, 8, 10, 8, 26, 6 }, enemyStatMultiplier = 1.5f, enemyDamageMultiplier = 1.28f, extraAetherCostChance = 0.35f },
+            new RegionDefinition { id = "abyssal_strait", nameKey = "region.abyssal_strait", index = 5,
+                weatherWeights = new[] { 1, 1, 4, 4, 1, 1 }, encounterWeights = new[] { 36, 10, 20, 6, 8, 20 }, enemyStatMultiplier = 1.7f, enemyDamageMultiplier = 1.45f, extraAetherCostChance = 0.4f },
+            new RegionDefinition { id = "sky_throne", nameKey = "region.sky_throne", index = 6,
+                weatherWeights = new[] { 4, 1, 1, 4, 1, 1 }, encounterWeights = new[] { 44, 6, 8, 8, 28, 6 }, enemyStatMultiplier = 1.9f, enemyDamageMultiplier = 1.6f, extraAetherCostChance = 0.45f }
         };
 
         public static int RegionCount => Regions.Length;
@@ -691,7 +702,7 @@ namespace AetherArk.Content
 
             nodes.Add(new RouteNodeState
             {
-                id = "n7_1", nameKey = "node.gate", column = 7, lane = 1, aetherCost = 2,
+                id = "n7_1", nameKey = regionIndex >= RegionCount ? "node.final_gate" : "node.gate", column = 7, lane = 1, aetherCost = 2,
                 recommendedAltitude = AltitudeBand.High, weather = WeatherType.AetherCurrent,
                 encounterType = EncounterType.Gate, encounterId = "gate_finale"
             });

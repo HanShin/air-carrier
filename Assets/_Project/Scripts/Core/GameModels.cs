@@ -386,6 +386,8 @@ namespace AetherArk.Core
         /// <summary>Weights for Battle, Rescue, Salvage, Trade, Checkpoint, Storm on rollable columns.</summary>
         public int[] encounterWeights;
         public float enemyStatMultiplier = 1f;
+        /// <summary>Firepower grows more slowly than hull so late fights are longer, not instantly lethal.</summary>
+        public float enemyDamageMultiplier = 1f;
         public float extraAetherCostChance = 0.2f;
     }
 

@@ -67,9 +67,6 @@ namespace AetherArk.Core
                 var flagship = ContentCatalog.GetFlagship(state.playerShip?.id) ?? ContentCatalog.GetFlagship(UnlockRules.DefaultFlagship);
                 var starting = flagship?.startingWeapons ?? new[] { ContentCatalog.StartingWeapon };
                 for (var i = 0; i < starting.Length; i++) state.weaponSlots.Add(new WeaponSlotState { weaponId = starting[i] });
-                // The locked tutorial expedition carries the lance too, so the slot system is taught from the first battle.
-                if (state.isFirstExpedition && state.weaponSlots.Count < (state.playerShip?.weaponHardpoints ?? 2))
-                    state.weaponSlots.Add(new WeaponSlotState { weaponId = ContentCatalog.StartingSecondary });
             }
             if (state.playerShip != null && state.playerShip.weaponHardpoints < 1) state.playerShip.weaponHardpoints = 2;
         }
@@ -379,9 +376,13 @@ namespace AetherArk.Core
         public void BeginCombat(int tier, bool finalBattle)
         {
             var combatState = State.random.combat;
-            State.enemyShip = ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, State.regionIndex, ref combatState);
-            var scale = ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
-            if (scale > 1f)
+            State.enemyShip = finalBattle && State.regionCount > 1 && State.regionIndex >= State.regionCount
+                ? ContentCatalog.CreateEnemyById("enemy_gate_warden", ref combatState) ?? ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, State.regionIndex, ref combatState)
+                : ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, State.regionIndex, ref combatState);
+            // Difficulty also scales enemy toughness so Harsh differs from Standard even where firepower does not decide.
+            var difficultyToughness = State.difficulty == Difficulty.Harsh ? 1.15f : State.difficulty == Difficulty.Story ? 0.9f : 1f;
+            var scale = (State.enemyShip.id == "enemy_gate_warden" ? 1f : ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier) * difficultyToughness;
+            if (Math.Abs(scale - 1f) > 0.001f)
             {
                 var enemy = State.enemyShip;
                 enemy.maxHull = (float)Math.Round(enemy.maxHull * scale, 1); enemy.hull = enemy.maxHull;
@@ -845,8 +846,8 @@ namespace AetherArk.Core
 
         public float EnemyDamageMultiplier()
         {
-            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.72f : State.difficulty == Difficulty.Harsh ? 1.1f : 1f;
-            return difficultyMultiplier * ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
+            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.66f : State.difficulty == Difficulty.Harsh ? 1.25f : 1f;
+            return difficultyMultiplier * ContentCatalog.GetRegion(State.regionIndex).enemyDamageMultiplier;
         }
 
         /// <summary>Damage of the enemy's first mounted weapon per hit, scaled by difficulty and region.</summary>
@@ -1036,7 +1037,7 @@ namespace AetherArk.Core
                 LandBoarders(State.regionIndex >= 3 ? 4 : 3);
                 return;
             }
-            ApplyDamage(State.playerShip, ShipSystemType.FlightDeck, (5f + deck.EffectivePower) * regionMultiplier, false);
+            ApplyDamage(State.playerShip, ShipSystemType.FlightDeck, (5f + deck.EffectivePower) * ContentCatalog.GetRegion(State.regionIndex).enemyDamageMultiplier, false);
             AddLog("log.enemy_squadron_hit");
             RaiseCombatAlert("alert.enemy_airstrike", "", AlertSeverity.Warning, true);
         }
@@ -1275,9 +1276,9 @@ namespace AetherArk.Core
 
             // Port refit: the flagship grows with every gate it passes, so later regions are survivable.
             var ship = State.playerShip;
-            ship.maxHull += 2f;
-            ship.maxArmor += 1f;
-            ship.maxWard += 1f;
+            ship.maxHull += 3f;
+            ship.maxArmor += 2f;
+            ship.maxWard += 2f;
             ship.coreOutput += 1;
             var weapons = ship.GetSystem(ShipSystemType.Weapons);
             if (weapons != null && weapons.power < weapons.maxPower && ship.AllocatedPower() < ship.coreOutput) weapons.power++;
@@ -1306,7 +1307,7 @@ namespace AetherArk.Core
             State.resources.aether = Math.Max(State.resources.aether + 6, 16);
             State.resources.supplies = Math.Max(State.resources.supplies + 4, 12);
             State.resources.ordnance = Math.Max(State.resources.ordnance + 3, 8);
-            State.resources.salvage += 8;
+            State.resources.salvage += 12;
             State.convoy.morale = Math.Min(100, State.convoy.morale + 5);
             State.convoy.supportCooldown = 0;
             AddLog("log.region_cleared", State.regionIndex.ToString());

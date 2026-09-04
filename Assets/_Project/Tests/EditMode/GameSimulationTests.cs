@@ -858,7 +858,7 @@ namespace AetherArk.Tests
         [Test]
         public void Regions_FourAreDefinedAndLocalized()
         {
-            Assert.That(ContentCatalog.RegionCount, Is.EqualTo(4));
+            Assert.That(ContentCatalog.RegionCount, Is.EqualTo(6));
             var ko = new LocalizationService(Language.Korean);
             var en = new LocalizationService(Language.English);
             for (var index = 1; index <= ContentCatalog.RegionCount; index++)
@@ -937,7 +937,7 @@ namespace AetherArk.Tests
             profile.tutorialSeen = true;
             var simulation = GameSimulation.NewRun(profile, 505);
             var state = simulation.State;
-            Assert.That(state.regionCount, Is.EqualTo(4));
+            Assert.That(state.regionCount, Is.EqualTo(6));
             Assert.That(state.regionIndex, Is.EqualTo(1));
             var firstRoute = state.routeNodes.ConvertAll(node => node.encounterType.ToString() + node.weather);
 
@@ -965,7 +965,7 @@ namespace AetherArk.Tests
             Assert.That(state.combatLog.Exists(entry => entry.key == "log.region_cleared"), Is.True);
             Assert.That(state.playerShip.hull, Is.EqualTo(state.playerShip.maxHull).Within(0.001f), "port stop should fully repair the hull");
             Assert.That(state.playerShip.coreOutput, Is.EqualTo(12 + 1), "each cleared region should grow the core output");
-            Assert.That(state.playerShip.maxHull, Is.EqualTo(maxHullBefore + 2f).Within(0.001f), "each cleared region should grow the hull");
+            Assert.That(state.playerShip.maxHull, Is.EqualTo(maxHullBefore + 3f).Within(0.001f), "each cleared region should grow the hull");
             Assert.That(state.playerShip.AllocatedPower(), Is.LessThanOrEqualTo(state.playerShip.coreOutput));
             Assert.That(state.resources.ordnance, Is.GreaterThanOrEqualTo(8));
         }
@@ -1025,7 +1025,7 @@ namespace AetherArk.Tests
                 service.SaveRun(run);
                 var loaded = service.LoadRun();
                 Assert.That(loaded.regionIndex, Is.EqualTo(3));
-                Assert.That(loaded.regionCount, Is.EqualTo(4));
+                Assert.That(loaded.regionCount, Is.EqualTo(ContentCatalog.RegionCount));
                 Assert.That(loaded.totalTravelCount, Is.EqualTo(15));
             }
             finally
@@ -1069,7 +1069,7 @@ namespace AetherArk.Tests
             var earlyShot = early.EnemyShotDamage();
             var lateShot = late.EnemyShotDamage();
             Assert.That(earlyShot, Is.GreaterThan(0f));
-            Assert.That(lateShot, Is.EqualTo(earlyShot * ContentCatalog.GetRegion(3).enemyStatMultiplier).Within(0.01f),
+            Assert.That(lateShot, Is.EqualTo(earlyShot * ContentCatalog.GetRegion(3).enemyDamageMultiplier).Within(0.01f),
                 "enemy shot damage must follow the region multiplier, not just enemy hull");
         }
 
@@ -1118,7 +1118,7 @@ namespace AetherArk.Tests
                 Assert.That(run.phase, Is.EqualTo(GamePhase.RouteMap));
                 Assert.That(run.seed, Is.EqualTo(424242));
                 Assert.That(run.regionIndex, Is.EqualTo(2));
-                Assert.That(run.regionCount, Is.EqualTo(ContentCatalog.RegionCount));
+                Assert.That(run.regionCount, Is.EqualTo(4), "a save keeps the campaign length it was started with");
                 Assert.That(run.totalTravelCount, Is.EqualTo(9));
                 Assert.That(run.currentNodeId, Is.EqualTo("n2_1"));
                 Assert.That(run.routeNodes.Count, Is.EqualTo(20));
@@ -1323,8 +1323,7 @@ namespace AetherArk.Tests
             var profile = Profile();
             profile.tutorialSeen = true;
             var state = GameSimulation.NewRun(profile, 4).State;
-            Assert.That(state.weaponSlots.Count, Is.EqualTo(1), "later expeditions start with one weapon; the second hardpoint is bought at a port");
-            Assert.That(state.weaponSlots[0].weaponId, Is.EqualTo("aether_cannon"));
+            Assert.That(state.weaponSlots.ConvertAll(slot => slot.weaponId), Is.EqualTo(new[] { "aether_cannon", "ward_lance" }), "every run sails with the cannon and the ward lance");
             Assert.That(state.playerShip.weaponHardpoints, Is.EqualTo(2));
 
             var root = Path.Combine(Path.GetTempPath(), "aether-ark-weapons-" + Guid.NewGuid().ToString("N"));
@@ -1335,7 +1334,7 @@ namespace AetherArk.Tests
                 state.weaponSlots.Clear(); // simulate a save written before weapons existed
                 service.SaveRun(state);
                 var loaded = service.LoadRun();
-                Assert.That(loaded.weaponSlots.Count, Is.EqualTo(1));
+                Assert.That(loaded.weaponSlots.Count, Is.EqualTo(2));
                 Assert.That(loaded.weaponSlots[0].weaponId, Is.EqualTo("aether_cannon"));
             }
             finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
@@ -1455,11 +1454,12 @@ namespace AetherArk.Tests
             Assert.That(offers, Is.EqualTo(simulation.PortWeaponOffers()), "offers are deterministic");
             state.resources.salvage = 200;
             var first = ContentCatalog.GetWeapon(offers[0]);
+            var firstReplaced = state.weaponSlots.Count >= state.playerShip.weaponHardpoints ? ContentCatalog.GetWeapon(state.weaponSlots[state.weaponSlots.Count - 1].weaponId) : null;
             var salvageBefore = state.resources.salvage;
             Assert.That(simulation.PurchaseWeapon(offers[0]).success, Is.True);
             Assert.That(state.weaponSlots.Count, Is.EqualTo(2));
             Assert.That(state.weaponSlots[1].weaponId, Is.EqualTo(offers[0]));
-            Assert.That(state.resources.salvage, Is.EqualTo(salvageBefore - first.cost));
+            Assert.That(state.resources.salvage, Is.EqualTo(salvageBefore - first.cost + (firstReplaced != null ? firstReplaced.cost / 2 : 0)));
 
             var second = ContentCatalog.GetWeapon(offers[1]);
             var replaced = ContentCatalog.GetWeapon(state.weaponSlots[state.weaponSlots.Count - 1].weaponId);
@@ -1538,7 +1538,7 @@ namespace AetherArk.Tests
             Assert.That(state.playerShip.id, Is.EqualTo("ship_bastion"));
             Assert.That(state.playerShip.weaponHardpoints, Is.EqualTo(3));
             Assert.That(state.playerShip.moduleSlots, Is.EqualTo(5));
-            Assert.That(state.weaponSlots.ConvertAll(slot => slot.weaponId), Is.EqualTo(new[] { "heavy_cannon" }));
+            Assert.That(state.weaponSlots.ConvertAll(slot => slot.weaponId), Is.EqualTo(new[] { "heavy_cannon" }), "the Bastion sails with its heavy cannon only");
             Assert.That(ContentCatalog.GetDeckPlan(state.playerShip.id), Is.Not.Null);
 
             profile.flagshipId = "ship_zephyr";
@@ -1781,7 +1781,7 @@ namespace AetherArk.Tests
                 silhouettes.Add(definition.silhouette);
                 Assert.That(definition.weight, Is.GreaterThan(0), id);
                 Assert.That(definition.minRegion, Is.InRange(1, ContentCatalog.RegionCount), id);
-                Assert.That(definition.tier, Is.InRange(1, 2), id);
+                Assert.That(definition.tier, Is.InRange(1, 3), id); // tier 3 is reserved for the finale boss
                 Assert.That(ko.T(definition.nameKey), Is.Not.EqualTo(definition.nameKey), id);
                 Assert.That(en.T(definition.nameKey), Is.Not.EqualTo(definition.nameKey), id);
                 foreach (var weapon in definition.weapons) Assert.That(ContentCatalog.GetWeapon(weapon), Is.Not.Null, id + " weapon " + weapon);
@@ -1819,6 +1819,53 @@ namespace AetherArk.Tests
             var random = 9u;
             Assert.That(ContentCatalog.CreateEnemy(1, false, 4, ref random).id, Is.EqualTo("enemy_cutter"));
             Assert.That(ContentCatalog.CreateEnemy(2, false, 4, ref random).id, Is.EqualTo("enemy_cruiser"));
+        }
+
+        [Test]
+        public void Route_RegionsFiveAndSixBiasWeatherTowardTheirThemes()
+        {
+            Func<RouteNodeState, bool> generated = node => node.column >= 1 && node.column <= 6;
+            var abyss = Share(5, n => n.weather == WeatherType.Turbulence || n.weather == WeatherType.AetherCurrent, generated);
+            var throne = Share(6, n => n.weather == WeatherType.Clear || n.weather == WeatherType.AetherCurrent, generated);
+            Assert.That(abyss, Is.GreaterThan(0.45f));
+            Assert.That(throne, Is.GreaterThan(0.45f));
+            Assert.That(ContentCatalog.GetRegion(6).enemyStatMultiplier, Is.GreaterThan(ContentCatalog.GetRegion(5).enemyStatMultiplier));
+        }
+
+        [Test]
+        public void Finale_TheLastGateOfACampaignIsGuardedByTheWarden()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 909);
+            simulation.State.regionIndex = simulation.State.regionCount;
+            simulation.BeginCombat(2, true);
+            Assert.That(simulation.State.enemyShip.id, Is.EqualTo("enemy_gate_warden"));
+            Assert.That(ContentCatalog.DeckPlanFor(simulation.State.enemyShip), Is.Not.Null);
+            Assert.That(simulation.State.enemyShip.maxHull, Is.GreaterThan(46f), "gate reinforcement still applies to the boss");
+
+            var midway = GameSimulation.NewRun(profile, 910);
+            midway.State.regionIndex = 2;
+            midway.BeginCombat(2, true);
+            Assert.That(midway.State.enemyShip.id, Is.Not.EqualTo("enemy_gate_warden"), "only the final gate is guarded");
+
+            var tutorial = Profile(Difficulty.Story);
+            tutorial.tutorialSeen = false;
+            var first = GameSimulation.NewRun(tutorial, GameSimulation.FirstExpeditionSeed);
+            first.BeginCombat(2, true);
+            Assert.That(first.State.enemyShip.id, Is.EqualTo("enemy_cruiser"), "the tutorial gate stays the storm cruiser");
+        }
+
+        [Test]
+        public void Finale_LastRegionRouteNamesTheThroneGate()
+        {
+            var last = ContentCatalog.CreateRoute(11, ContentCatalog.RegionCount);
+            Assert.That(last.Find(node => node.encounterType == EncounterType.Gate).nameKey, Is.EqualTo("node.final_gate"));
+            var earlier = ContentCatalog.CreateRoute(11, 2);
+            Assert.That(earlier.Find(node => node.encounterType == EncounterType.Gate).nameKey, Is.EqualTo("node.gate"));
+            var ko = new LocalizationService(Language.Korean);
+            Assert.That(ko.T("node.final_gate"), Is.Not.EqualTo("node.final_gate"));
+            Assert.That(ko.T("ship.enemy_gate_warden"), Is.Not.EqualTo("ship.enemy_gate_warden"));
         }
 
         [TestCase(WeatherType.Thunderhead, -0.08f)]

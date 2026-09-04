@@ -122,8 +122,10 @@ namespace AetherArk.Runtime
             for (var seed = 1; seed < 4000; seed++)
             {
                 Simulation = GameSimulation.NewRun(Profile, seed);
-                if (definition != null) Simulation.State.regionIndex = definition.minRegion; // region-gated configs need their region
-                Simulation.BeginCombat(tier, false);
+                if (definition != null) Simulation.State.regionIndex = Math.Min(definition.minRegion, Simulation.State.regionCount); // region-gated configs need their region
+                var finale = wanted == "gate_warden";
+                if (finale) Simulation.State.regionIndex = Simulation.State.regionCount;
+                Simulation.BeginCombat(finale ? 2 : tier, finale);
                 if (Simulation.State.enemyShip.id == "enemy_" + wanted) break;
             }
             if (Array.IndexOf(args, "-debug-damage") >= 0) DebugScenarios.ApplyDamageShowcase(Simulation.State);

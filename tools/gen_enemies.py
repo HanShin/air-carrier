@@ -5,6 +5,7 @@ SIL = {  # silhouette -> (plan id, ko family, en family)
  "boarder": ("enemy_boarder", "강습 바지선", "Boarding Barge"), "cruiser": ("enemy_cruiser", "순양함", "Cruiser"), "monitor": ("enemy_monitor", "감시함", "Monitor"),
  "lancer": ("enemy_lancer", "창기병 구축함", "Lancer Destroyer"), "minelayer": ("enemy_minelayer", "기뢰 부설함", "Minelayer"), "firebrand": ("enemy_firebrand", "소이함", "Firebrand"),
  "dreadnought": ("enemy_dreadnought", "드레드노트", "Dreadnought"), "hive": ("enemy_hive", "벌집 항모", "Hive Carrier"), "wraith": ("enemy_wraith", "망령함", "Wraith"),
+ "warden": ("enemy_warden", "천공문 수호함", "Gate Warden"),
 }
 def e(id, sil, tier, weight, region, hull, armor, ward, core, power, maxp, weapons, ko=None, en=None, boarding=False, name_key=None):
     assert sum(power) <= core, id
@@ -53,8 +54,10 @@ E = [
  # wraith
  e("enemy_wraith", "wraith", 2, 20, 3, 26, 12, 14, 12, [1,0,1,4,1,2,0,2,0,1], [2,0,3,4,3,3,1,3,1,2], ["rail_harpoon"], "제국 망령함", "Imperial Wraith"),
  e("enemy_wraith_ghost", "wraith", 2, 15, 4, 28, 13, 15, 13, [1,0,1,4,1,2,0,3,0,1], [2,0,3,4,3,3,1,3,1,2], ["gate_piercer"], "제국 유령 망령함", "Imperial Ghost Wraith"),
+ # Finale boss: tier 3 keeps it out of the random pools; BeginCombat spawns it at the campaign's last gate.
+ e("enemy_gate_warden", "warden", 3, 1, 6, 46, 28, 20, 15, [1,0,1,1,3,4,2,2,0,1], [2,0,3,3,4,5,3,3,1,2], ["siege_cannon", "resonance_lance"], "천공문 수호함 \"불멸의 서약\"", "Gate Warden \"Undying Oath\"", boarding=True),
 ]
-assert len(E) >= 30 and len({x["sil"] for x in E}) == 12, (len(E), len({x["sil"] for x in E}))
+assert len(E) >= 31 and len({x["sil"] for x in E}) == 13, (len(E), len({x["sil"] for x in E}))
 
 def cs_str(s): return '"' + s.replace('"', '\\"') + '"'
 lib = ["using System.Collections.Generic;", "using AetherArk.Core;", "", "namespace AetherArk.Content", "{",

@@ -66,11 +66,11 @@ namespace AetherArk.Content
             Add("unlock.tutorial", "첫 원정 승리", "winning the first expedition");
             Add("unlock.campaign", "4지역 캠페인 승리", "winning a full four-region campaign");
             Add("flagship.ship_vanguard", "EAS 여명의 피난처", "EAS Dawn Refuge");
-            Add("flagship.ship_vanguard.desc", "균형 잡힌 항모. 선체 32·장갑 18·결계 12, 하드포인트 2, 모듈 4.", "Balanced carrier. Hull 32 · armor 18 · ward 12, 2 hardpoints, 4 module slots.");
+            Add("flagship.ship_vanguard.desc", "균형 잡힌 항모. 선체 32·장갑 18·결계 12, 하드포인트 2, 모듈 4. 에테르 포·결계 랜스 장착.", "Balanced carrier. Hull 32 · armor 18 · ward 12, 2 hardpoints, 4 module slots. Mounts an aether cannon and a ward lance.");
             Add("flagship.ship_bastion", "EAS 철벽", "EAS Iron Bastion");
             Add("flagship.ship_bastion.desc", "포대형 중장갑함. 선체 40·장갑 24·결계 6, 하드포인트 3, 모듈 5, 갑판 약함. 중포 장착.", "Armoured gun platform. Hull 40 · armor 24 · ward 6, 3 hardpoints, 5 module slots, weak deck. Mounts a heavy cannon.");
             Add("flagship.ship_zephyr", "EAS 서풍 연", "EAS Zephyr Kite");
-            Add("flagship.ship_zephyr.desc", "고속 경항모. 선체 32·장갑 14·결계 16, 하드포인트 2, 모듈 4, 강한 갑판·엔진·센서. 요격대 5기. 에테르 포·결계 랜스 장착.", "Fast light carrier. Hull 32 · armor 14 · ward 16, 2 hardpoints, 4 module slots, strong deck, engines and sensors. Five interceptors. Mounts an aether cannon and a ward lance.");
+            Add("flagship.ship_zephyr.desc", "고속 경항모. 선체 34·장갑 18·결계 16, 하드포인트 2, 모듈 4, 강한 갑판·엔진·센서. 요격대 5기. 에테르 포·결계 랜스 장착.", "Fast light carrier. Hull 34 · armor 18 · ward 16, 2 hardpoints, 4 module slots, strong deck, engines and sensors. Five interceptors. Mounts an aether cannon and a ward lance.");
             Add("setup.launch", "피난선단 출항", "Launch the convoy");
             Add("setup.back", "돌아가기", "Back");
             Add("setup.warning", "함장이 사망하면 원정은 즉시 끝납니다.", "The expedition ends immediately if the captain dies.");
@@ -155,6 +155,9 @@ namespace AetherArk.Content
             Add("region.storm_corridor", "폭풍 회랑", "Storm Corridor");
             Add("region.icefield_heights", "빙운 고원", "Icefield Heights");
             Add("region.imperial_cordon", "제국 봉쇄권", "Imperial Cordon");
+            Add("region.abyssal_strait", "심연 해협", "Abyssal Strait");
+            Add("region.sky_throne", "천공 왕좌", "Sky Throne");
+            Add("node.final_gate", "천공 왕좌의 문", "The Throne Gate");
             Add("log.region_cleared", "천공문을 통과했습니다. 지역 {0} 진입 — 항구에서 재보급과 수리를 마쳤습니다.", "Through the gate. Entering region {0} — resupplied and repaired in port.");
             Add("ui.chance", "성공 {0}%", "{0}% chance");
             Add("ui.route_select_hint", "노드를 클릭해 항로를 확인하고 출항하십시오.", "Click a node to inspect it, then depart.");
