@@ -22,12 +22,14 @@ namespace AetherArk.Runtime
     }
 
     /// <summary>
-    /// Draws a top-down FTL-style deck plan: hull silhouette, rooms coloured by condition,
-    /// hazard overlays, power pips, integrity bars and crew tokens. Everything is built from
-    /// plain UI images so no art assets are required.
+    /// Draws a top-down FTL-style deck plan: hull art, rooms coloured by condition,
+    /// hazard overlays, power pips, integrity bars and crew tokens. Enemy deck plans use
+    /// silhouette sprites when available and retain the procedural hull as a safe fallback.
     /// </summary>
     public static class ShipBlueprintView
     {
+        private const string HullArtResourcePath = "Art/Ships/";
+        private static readonly Dictionary<string, Sprite> HullSprites = new Dictionary<string, Sprite>();
         private static readonly Color HullPlate = new Color(0.075f, 0.095f, 0.125f, 0.985f);
         private static readonly Color HullEdge = new Color(0.72f, 0.55f, 0.24f, 0.9f);
         private static readonly Color RoomOperational = new Color(0.09f, 0.3f, 0.34f, 0.96f);
@@ -66,7 +68,7 @@ namespace AetherArk.Runtime
             var gridX = Mathf.Floor((size.x - gridWidth - bowMargin + sternMargin) / 2f);
             var gridY = Mathf.Floor((size.y - gridHeight) / 2f);
 
-            DrawHull(ui, container, gridX, gridY, gridWidth, gridHeight, bowMargin, options.highContrast);
+            DrawHull(ui, container, ship.deckPlanId, size, gridX, gridY, gridWidth, gridHeight, bowMargin, options.highContrast);
 
             for (var i = 0; i < plan.tiles.Count; i++)
             {
@@ -82,9 +84,20 @@ namespace AetherArk.Runtime
             }
         }
 
-        private static void DrawHull(UiFactory ui, RectTransform container, float gridX, float gridY, float gridWidth, float gridHeight,
-            float bowMargin, bool highContrast)
+        private static void DrawHull(UiFactory ui, RectTransform container, string deckPlanId, Vector2 canvasSize, float gridX, float gridY,
+            float gridWidth, float gridHeight, float bowMargin, bool highContrast)
         {
+            var sprite = LoadHullSprite(deckPlanId);
+            if (sprite != null)
+            {
+                var artRect = ui.Rect("HullArt_" + deckPlanId, container, Vector2.zero, canvasSize);
+                var art = ui.Image(artRect, highContrast ? Color.white : new Color(1f, 1f, 1f, 0.9f));
+                art.sprite = sprite;
+                art.preserveAspect = true;
+                art.raycastTarget = false;
+                return;
+            }
+
             const float plate = 14f;
             var edge = highContrast ? 3f : 2f;
             var plateColor = HullPlate;
@@ -108,6 +121,15 @@ namespace AetherArk.Runtime
             var plateSize = new Vector2(gridWidth + plate * 2f, gridHeight + plate * 2f);
             ui.PanelRect("HullPlate", container, platePosition, plateSize, plateColor).GetComponent<Image>().raycastTarget = false;
             ui.Outline("HullEdge", container, platePosition, plateSize, edge, edgeColor);
+        }
+
+        public static Sprite LoadHullSprite(string deckPlanId)
+        {
+            if (string.IsNullOrEmpty(deckPlanId)) return null;
+            if (HullSprites.TryGetValue(deckPlanId, out var cached)) return cached;
+            var sprite = Resources.Load<Sprite>(HullArtResourcePath + deckPlanId);
+            HullSprites[deckPlanId] = sprite;
+            return sprite;
         }
 
         private static void DrawRoom(UiFactory ui, LocalizationService l10n, RectTransform container, ShipState ship, ShipSystemState system,

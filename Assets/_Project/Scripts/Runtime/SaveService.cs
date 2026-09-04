@@ -36,6 +36,7 @@ namespace AetherArk.Runtime
             run = MigrateRun(run);
             GameSimulation.EnsureLoadout(run);
             GameSimulation.EnsureWings(run);
+            GameSimulation.EnsureCrewProgression(run);
             if (run.phase == GamePhase.Victory || run.phase == GamePhase.Defeat) return null;
             return run;
         }

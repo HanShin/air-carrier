@@ -83,6 +83,16 @@ namespace AetherArk.Runtime
             return image;
         }
 
+        public Image Icon(string name, Transform parent, Sprite sprite, Vector2 position, Vector2 size, Color? tint = null)
+        {
+            var rect = Rect(name, parent, position, size);
+            var image = Image(rect, tint ?? Color.white);
+            image.sprite = sprite;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            return image;
+        }
+
         public RectTransform PanelRect(string name, Transform parent, Vector2 position, Vector2 size, Color color)
         {
             var rect = Rect(name, parent, position, size);

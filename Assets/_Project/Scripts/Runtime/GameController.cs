@@ -402,6 +402,7 @@ namespace AetherArk.Runtime
         public void FireSlot(int slot, ShipSystemType target) => Apply(() => Simulation.FireWeapon(slot, target));
         public void PurchaseWeapon(string weaponId) => Apply(() => Simulation.PurchaseWeapon(weaponId));
         public void PurchaseWing(string wingId) => Apply(() => Simulation.PurchaseWing(wingId));
+        public void RecruitCrew(string crewId) => Apply(() => Simulation.RecruitCrew(crewId));
         public void ChangeAltitude(AltitudeBand altitude) => Apply(() => Simulation.Execute(new ChangeAltitudeCommand(altitude)));
         public void MoveCrew(string crewId, ShipSystemType room) => Apply(() => Simulation.Execute(new MoveCrewCommand(crewId, room)));
         public void Overcharge(ShipSystemType type) => Apply(() => Simulation.Execute(new OverchargeCommand(type)));

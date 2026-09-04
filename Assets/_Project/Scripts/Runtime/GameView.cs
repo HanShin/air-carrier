@@ -17,6 +17,7 @@ namespace AetherArk.Runtime
         private string selectedRouteNodeId;
         private ShipSystemType selectedPlayerSystem = ShipSystemType.Weapons;
         private ShipSystemType selectedEnemySystem = ShipSystemType.Weapons;
+        private bool showPortCrew;
 
         private Color PanelColor => controller.Profile.accessibility.highContrast ? new Color(0.01f, 0.02f, 0.035f, 0.99f) : UiFactory.Panel;
 
@@ -48,7 +49,7 @@ namespace AetherArk.Runtime
                 new Vector2(60f, 114f), new Vector2(400f, 62f));
             ui.Button("Quit", panel, l10n.T("menu.quit"), controller.Quit,
                 new Vector2(60f, 32f), new Vector2(400f, 62f), new Color(0.22f, 0.13f, 0.16f, 0.95f));
-            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.3 · LINEAGES", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
+            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.7 · EQUIPMENT ICONS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
                 new Vector2(1500f, 28f), new Vector2(360f, 30f));
         }
 
@@ -434,6 +435,19 @@ namespace AetherArk.Runtime
             ui.Text("PortSalvage", panel, $"{l10n.T("ui.salvage")} {state.resources.salvage}   ·   {l10n.T("ui.port_installed", $"{state.installedModules.Count}/{state.playerShip.moduleSlots}")}", 20,
                 UiFactory.Aether, TextAnchor.MiddleLeft, new Vector2(50f, 590f), new Vector2(1500f, 40f), FontStyle.Bold);
 
+            ui.Button("PortMarketTab", panel, l10n.T("ui.port_market_tab"), () => { showPortCrew = false; ShowPort(); },
+                new Vector2(1050f, 540f), new Vector2(230f, 42f), !showPortCrew ? UiFactory.Brass : UiFactory.PanelSoft,
+                !showPortCrew ? UiFactory.Ink : UiFactory.TextPrimary, 15);
+            ui.Button("PortCrewTab", panel, l10n.T("ui.port_crew_tab"), () => { showPortCrew = true; ShowPort(); },
+                new Vector2(1300f, 540f), new Vector2(230f, 42f), showPortCrew ? UiFactory.Brass : UiFactory.PanelSoft,
+                showPortCrew ? UiFactory.Ink : UiFactory.TextPrimary, 15);
+            if (showPortCrew)
+            {
+                ShowPortCrew(panel, state);
+                AddPortFooter(panel);
+                return;
+            }
+
             ui.Text("OffersTitle", panel, l10n.T("ui.port_offers"), 18, UiFactory.Brass, TextAnchor.MiddleLeft, new Vector2(50f, 540f), new Vector2(600f, 36f), FontStyle.Bold);
             var offers = controller.Simulation.PortOffers();
             var slotsFull = state.installedModules.Count >= state.playerShip.moduleSlots;
@@ -445,9 +459,10 @@ namespace AetherArk.Runtime
                 var card = ui.PanelRect("Offer_" + module.id, panel, new Vector2(x, 260f), new Vector2(480f, 270f), UiFactory.PanelSoft);
                 card.GetComponent<Image>().raycastTarget = false;
                 ui.Outline("OfferEdge_" + module.id, panel, new Vector2(x, 260f), new Vector2(480f, 270f), 1f, new Color(0.3f, 0.36f, 0.42f, 0.9f));
-                ui.Text("OfferName_" + module.id, card, l10n.T(module.nameKey), 22, UiFactory.TextPrimary, TextAnchor.MiddleLeft, new Vector2(20f, 214f), new Vector2(440f, 40f), FontStyle.Bold);
+                ui.Icon("ModuleIcon_" + module.id, card, GameIconLibrary.Module(module.category), new Vector2(18f, 178f), new Vector2(64f, 64f));
+                ui.Text("OfferName_" + module.id, card, l10n.T(module.nameKey), 22, UiFactory.TextPrimary, TextAnchor.MiddleLeft, new Vector2(94f, 214f), new Vector2(366f, 40f), FontStyle.Bold);
                 ui.Text("OfferMeta_" + module.id, card, $"{l10n.EnumName(module.category)}  ·  {l10n.T("ui.tier", module.tier.ToString())}", 14, UiFactory.TextMuted, TextAnchor.MiddleLeft,
-                    new Vector2(20f, 184f), new Vector2(440f, 26f));
+                    new Vector2(94f, 184f), new Vector2(366f, 26f));
                 ui.Text("OfferDesc_" + module.id, card, l10n.T(module.descriptionKey), 16, UiFactory.Aether, TextAnchor.UpperLeft, new Vector2(20f, 90f), new Vector2(440f, 90f));
                 var affordable = state.resources.salvage >= module.cost;
                 var localId = module.id;
@@ -462,8 +477,8 @@ namespace AetherArk.Runtime
             {
                 var module = ContentCatalog.GetModule(state.installedModules[i]);
                 if (module == null) continue;
-                if (list.Length > 0) list.Append("     ");
-                list.Append("◆ ").Append(l10n.T(module.nameKey));
+                if (list.Length > 0) list.Append("  ·  ");
+                list.Append(l10n.T(module.nameKey));
             }
             ui.Text("InstalledList", panel, l10n.T("ui.port_installed", state.installedModules.Count.ToString()) + ": " + (list.Length > 0 ? list.ToString() : l10n.T("ui.port_none")), 13,
                 UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(50f, 76f), new Vector2(1000f, 24f));
@@ -478,12 +493,13 @@ namespace AetherArk.Runtime
                 var x = 50f + i * 500f;
                 var card = ui.PanelRect("WeaponOffer_" + weapon.id, panel, new Vector2(x, 128f), new Vector2(480f, 116f), UiFactory.PanelSoft);
                 card.GetComponent<Image>().raycastTarget = false;
+                ui.Icon("WeaponOfferIcon_" + weapon.id, card, GameIconLibrary.Weapon(weapon.family), new Vector2(14f, 42f), new Vector2(62f, 62f));
                 ui.Text("WeaponOfferName_" + weapon.id, card, l10n.T(weapon.nameKey), 18, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
-                    new Vector2(18f, 80f), new Vector2(300f, 30f), FontStyle.Bold);
+                    new Vector2(84f, 80f), new Vector2(378f, 30f), FontStyle.Bold);
                 ui.Text("WeaponOfferMeta_" + weapon.id, card, $"{l10n.EnumName(weapon.family)}  ·  {l10n.T("ui.tier", weapon.tier.ToString())}  ·  {l10n.T("ui.weapon_power", weapon.powerCost.ToString())}  ·  {weapon.damage:0.0} / {weapon.cooldown:0.0}s", 12,
-                    UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(18f, 58f), new Vector2(440f, 22f));
+                    UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(84f, 58f), new Vector2(378f, 22f));
                 ui.Text("WeaponOfferDesc_" + weapon.id, card, l10n.T(weapon.descriptionKey), 13, UiFactory.Aether, TextAnchor.UpperLeft,
-                    new Vector2(18f, 30f), new Vector2(440f, 28f));
+                    new Vector2(84f, 30f), new Vector2(378f, 28f));
                 var slots = state.weaponSlots;
                 var replaces = slots.Count >= state.playerShip.weaponHardpoints && slots.Count > 0 ? ContentCatalog.GetWeapon(slots[slots.Count - 1].weaponId) : null;
                 var label = $"{l10n.T("ui.buy")}  ·  {l10n.T("ui.salvage")} {weapon.cost}" + (replaces != null ? $"   ({l10n.T("ui.replaces", l10n.T(replaces.nameKey))})" : string.Empty);
@@ -500,12 +516,13 @@ namespace AetherArk.Runtime
                     new Vector2(1050f, 250f), new Vector2(400f, 30f), FontStyle.Bold);
                 var card = ui.PanelRect("WingOffer_" + wing.id, panel, new Vector2(1050f, 128f), new Vector2(480f, 116f), UiFactory.PanelSoft);
                 card.GetComponent<Image>().raycastTarget = false;
+                ui.Icon("WingOfferIcon_" + wing.id, card, GameIconLibrary.Wing(wing.type), new Vector2(14f, 42f), new Vector2(62f, 62f));
                 ui.Text("WingOfferName_" + wing.id, card, l10n.T(wing.nameKey), 18, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
-                    new Vector2(18f, 80f), new Vector2(300f, 30f), FontStyle.Bold);
+                    new Vector2(84f, 80f), new Vector2(378f, 30f), FontStyle.Bold);
                 ui.Text("WingOfferMeta_" + wing.id, card, $"{l10n.EnumName(wing.type)}  ·  {l10n.T("ui.tier", wing.tier.ToString())}  ·  {string.Format(l10n.T("ui.wing_meta"), wing.strength, wing.ordnanceCost)}", 12,
-                    UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(18f, 58f), new Vector2(440f, 22f));
+                    UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(84f, 58f), new Vector2(378f, 22f));
                 ui.Text("WingOfferDesc_" + wing.id, card, l10n.T(wing.descriptionKey), 13, UiFactory.Aether, TextAnchor.UpperLeft,
-                    new Vector2(18f, 30f), new Vector2(440f, 28f));
+                    new Vector2(84f, 30f), new Vector2(378f, 28f));
                 var sameBay = state.squadrons.Find(sq => (ContentCatalog.GetWing(sq.wingId)?.type ?? sq.type) == wing.type);
                 var replacedWing = sameBay != null ? ContentCatalog.GetWing(sameBay.wingId) : state.squadrons.Count >= state.playerShip.wingBays && state.squadrons.Count > 0 ? ContentCatalog.GetWing(state.squadrons[state.squadrons.Count - 1].wingId) : null;
                 var wingLabel = $"{l10n.T("ui.buy")}  ·  {l10n.T("ui.salvage")} {wing.cost}" + (replacedWing != null ? $"   ({l10n.T("ui.replaces", l10n.T(replacedWing.nameKey))})" : string.Empty);
@@ -531,7 +548,75 @@ namespace AetherArk.Runtime
             ui.Text("PortMounted", panel, $"{l10n.T("ui.weapons_title")}: {mounted}     ·     {l10n.T("ui.wing_bays")}: {carried}", 13, UiFactory.TextMuted, TextAnchor.MiddleLeft,
                 new Vector2(50f, 100f), new Vector2(1100f, 24f));
 
-            var depart = ui.Button("DepartPort", panel, l10n.T("ui.port_depart"), ConfirmPort, new Vector2(1150f, 40f), new Vector2(400f, 70f), UiFactory.Brass, UiFactory.Ink, 20);
+            AddPortFooter(panel);
+        }
+
+        private void ShowPortCrew(Transform panel, RunState state)
+        {
+            var active = new List<CrewState>();
+            for (var i = 0; i < state.crew.Count; i++) if (!state.crew[i].isDead) active.Add(state.crew[i]);
+            ui.Text("PortRosterTitle", panel,
+                l10n.T("ui.crew_roster") + $"  ·  {l10n.T("ui.crew_capacity", $"{active.Count}/{CrewProgressionRules.MaxActiveCrew}")}",
+                18, UiFactory.Brass, TextAnchor.MiddleLeft, new Vector2(50f, 492f), new Vector2(920f, 36f), FontStyle.Bold);
+
+            for (var i = 0; i < active.Count && i < CrewProgressionRules.MaxActiveCrew; i++)
+            {
+                var crew = active[i];
+                var x = 50f + (i % 2) * 490f;
+                var y = 392f - (i / 2) * 104f;
+                var card = ui.PanelRect("Roster_" + crew.id, panel, new Vector2(x, y), new Vector2(470f, 92f), UiFactory.PanelSoft);
+                card.GetComponent<Image>().raycastTarget = false;
+                var recruit = CrewLibrary.Get(crew.id);
+                var name = recruit == null ? crew.displayName : l10n.T(recruit.nameKey);
+                var experience = crew.skillLevel >= CrewProgressionRules.MaxSkillLevel
+                    ? l10n.T("ui.max_level")
+                    : l10n.T("ui.experience", $"{crew.experience}/{CrewProgressionRules.ExperienceNeeded(crew.skillLevel)}");
+                ui.Text("RosterName_" + crew.id, card, (crew.isCaptain ? "★ " : "") + name, 17, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                    new Vector2(48f, 54f), new Vector2(400f, 30f), FontStyle.Bold);
+                ui.Text("RosterMeta_" + crew.id,
+                    card, $"{l10n.EnumName(crew.role)} · {l10n.EnumName(crew.lineage)} · {l10n.T("ui.level", crew.skillLevel.ToString())}", 12,
+                    UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(48f, 31f), new Vector2(400f, 22f));
+                ui.Text("RosterIdentity_" + crew.id, card, $"{l10n.T(crew.traitKey)} · {l10n.T(crew.backgroundKey)}     {experience}", 12,
+                    UiFactory.Aether, TextAnchor.MiddleLeft, new Vector2(48f, 8f), new Vector2(400f, 22f));
+                ui.Circle("RosterPortrait_" + crew.id, card, new Vector2(12f, 30f), new Vector2(28f, 28f), ShipBlueprintView.LineageColor(crew.lineage)).raycastTarget = false;
+                ui.Text("RosterInitial_" + crew.id, card, BlueprintRules.CrewInitial(name), 13, UiFactory.Ink, TextAnchor.MiddleCenter,
+                    new Vector2(12f, 30f), new Vector2(28f, 28f), FontStyle.Bold);
+            }
+
+            ui.Text("RecruitTitle", panel, l10n.T("ui.port_recruit"), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(1050f, 492f), new Vector2(480f, 36f), FontStyle.Bold);
+            var offer = controller.Simulation.PortRecruitOffer();
+            if (offer == null)
+            {
+                ui.Text("NoRecruit", panel, l10n.T("ui.no_recruits"), 16, UiFactory.TextMuted, TextAnchor.MiddleCenter,
+                    new Vector2(1050f, 220f), new Vector2(480f, 250f));
+                return;
+            }
+
+            var recruitCard = ui.PanelRect("Recruit_" + offer.id, panel, new Vector2(1050f, 202f), new Vector2(480f, 272f), UiFactory.PanelSoft);
+            recruitCard.GetComponent<Image>().raycastTarget = false;
+            ui.Text("RecruitName", recruitCard, l10n.T(offer.nameKey), 24, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                new Vector2(24f, 218f), new Vector2(432f, 38f), FontStyle.Bold);
+            ui.Text("RecruitMeta", recruitCard, $"{l10n.EnumName(offer.role)} · {l10n.EnumName(offer.lineage)} · {l10n.T("ui.level", "1")}", 14,
+                UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(24f, 188f), new Vector2(432f, 26f));
+            ui.Text("RecruitIdentity", recruitCard, $"◆ {l10n.T(offer.traitKey)}  —  {l10n.T(offer.traitKey + ".desc")}\n◆ {l10n.T(offer.backgroundKey)}  —  {l10n.T(offer.backgroundKey + ".desc")}", 13,
+                UiFactory.Aether, TextAnchor.UpperLeft, new Vector2(24f, 94f), new Vector2(432f, 84f));
+            var canRecruit = active.Count < CrewProgressionRules.MaxActiveCrew && state.resources.salvage >= offer.cost;
+            var localOffer = offer.id;
+            var recruitButton = ui.Button("RecruitButton", recruitCard,
+                $"{l10n.T("ui.recruit")}  ·  {l10n.T("ui.salvage")} {offer.cost}", () => controller.RecruitCrew(localOffer),
+                new Vector2(24f, 20f), new Vector2(432f, 58f), canRecruit ? UiFactory.Brass : UiFactory.PanelSoft,
+                canRecruit ? UiFactory.Ink : UiFactory.TextMuted, 17);
+            recruitButton.interactable = canRecruit;
+            if (active.Count >= CrewProgressionRules.MaxActiveCrew)
+                ui.Text("RecruitFull", recruitCard, l10n.T("command.crew_capacity"), 12, UiFactory.Danger, TextAnchor.MiddleRight,
+                    new Vector2(180f, 218f), new Vector2(276f, 38f), FontStyle.Bold);
+        }
+
+        private void AddPortFooter(Transform panel)
+        {
+            var depart = ui.Button("DepartPort", panel, l10n.T("ui.port_depart"), ConfirmPort,
+                new Vector2(1150f, 40f), new Vector2(400f, 70f), UiFactory.Brass, UiFactory.Ink, 20);
             depart.interactable = true;
             AddLastReport(new Vector2(210f, 130f), new Vector2(900f, 60f));
         }
@@ -604,32 +689,37 @@ namespace AetherArk.Runtime
             var panel = ui.PanelRect("CrewColumn", ui.Root, new Vector2(20f, 270f), new Vector2(200f, 640f), PanelColor);
             ui.Text("CrewTitle", panel, l10n.T("ui.crew"), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
                 new Vector2(14f, 596f), new Vector2(170f, 36f), FontStyle.Bold);
-            for (var i = 0; i < state.crew.Count && i < 6; i++)
+            var visible = new List<CrewState>();
+            for (var i = 0; i < state.crew.Count; i++) if (!state.crew[i].isDead) visible.Add(state.crew[i]);
+            for (var i = 0; i < state.crew.Count; i++) if (state.crew[i].isDead) visible.Add(state.crew[i]);
+            for (var i = 0; i < visible.Count && i < CrewProgressionRules.MaxActiveCrew; i++)
             {
-                var crew = state.crew[i];
-                var y = 494f - i * 98f;
+                var crew = visible[i];
+                var y = 522f - i * 66f;
                 var health = crew.isDead ? L("사망", "DEAD") : crew.IsDowned ? L("구조 대기", "DOWNED") : crew.onSortie ? L("출격 중", "SORTIE") : $"HP {crew.health:0}/{crew.maxHealth:0}";
-                var label = $"{(crew.isCaptain ? "★ " : "")}{crew.displayName}\n{crew.role} · {l10n.EnumName(crew.lineage)}\n{health}";
+                var recruit = CrewLibrary.Get(crew.id);
+                var name = recruit == null ? crew.displayName : l10n.T(recruit.nameKey);
+                var label = $"{(crew.isCaptain ? "★ " : "")}{name}\n{l10n.EnumName(crew.role)} · {l10n.EnumName(crew.lineage)} · Lv.{crew.skillLevel}\n{l10n.T(crew.traitKey)} · {l10n.T(crew.backgroundKey)}\n{health}";
                 var selected = selectedCrewId == crew.id;
                 var color = crew.isDead ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : selected ? UiFactory.Violet : UiFactory.PanelSoft;
                 var localCrew = crew;
                 var button = ui.Button("Crew_" + crew.id, panel, label, () => SelectCrew(localCrew.id),
-                    new Vector2(8f, y), new Vector2(184f, 92f), color, UiFactory.TextPrimary, 13);
+                    new Vector2(8f, y), new Vector2(184f, 62f), color, UiFactory.TextPrimary, 9);
                 button.interactable = !crew.isDead && !crew.onSortie;
                 var labelText = button.GetComponentInChildren<Text>();
                 if (labelText != null)
                 {
                     labelText.alignment = TextAnchor.MiddleLeft;
-                    labelText.rectTransform.anchoredPosition = new Vector2(40f, 4f);
-                    labelText.rectTransform.sizeDelta = new Vector2(140f, 84f);
+                    labelText.rectTransform.anchoredPosition = new Vector2(38f, 5f);
+                    labelText.rectTransform.sizeDelta = new Vector2(142f, 50f);
                     labelText.resizeTextForBestFit = false;
                 }
                 var tokenColor = crew.isDead ? new Color(0.3f, 0.3f, 0.3f, 1f) : ShipBlueprintView.LineageColor(crew.lineage);
-                ui.Circle("Portrait_" + crew.id, button.transform, new Vector2(8f, 34f), new Vector2(26f, 26f), tokenColor).raycastTarget = false;
-                ui.Text("PortraitInitial_" + crew.id, button.transform, BlueprintRules.CrewInitial(crew.displayName), 13, UiFactory.Ink, TextAnchor.MiddleCenter,
-                    new Vector2(8f, 34f), new Vector2(26f, 26f), FontStyle.Bold);
+                ui.Circle("Portrait_" + crew.id, button.transform, new Vector2(7f, 20f), new Vector2(25f, 25f), tokenColor).raycastTarget = false;
+                ui.Text("PortraitInitial_" + crew.id, button.transform, BlueprintRules.CrewInitial(name), 12, UiFactory.Ink, TextAnchor.MiddleCenter,
+                    new Vector2(7f, 20f), new Vector2(25f, 25f), FontStyle.Bold);
                 ui.Bar("CrewHealth_" + crew.id, button.transform, crew.maxHealth <= 0f ? 0f : crew.health / crew.maxHealth,
-                    new Vector2(8f, 6f), new Vector2(168f, 5f), crew.health < crew.maxHealth * 0.35f ? UiFactory.Danger : UiFactory.Success);
+                    new Vector2(7f, 4f), new Vector2(170f, 4f), crew.health < crew.maxHealth * 0.35f ? UiFactory.Danger : UiFactory.Success);
             }
         }
 
@@ -737,6 +827,7 @@ namespace AetherArk.Runtime
                 button.interactable = ready;
                 if (weapon != null)
                 {
+                    ui.Icon("WeaponIcon_" + slot, panel, GameIconLibrary.Weapon(weapon.family), new Vector2(21f, y + 3f), new Vector2(24f, 24f), powered ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f));
                     var progress = weapon.cooldown <= 0f ? 1f : 1f - Mathf.Clamp01(mount.cooldown / weapon.cooldown);
                     ui.Bar("WeaponCooldown_" + slot, panel, progress, new Vector2(22f, y + 1f), new Vector2(256f, 3f), powered ? UiFactory.Brass : UiFactory.TextMuted);
                 }
@@ -802,27 +893,15 @@ namespace AetherArk.Runtime
             });
         }
 
-        private static string MissionGlyph(SquadronMission mission)
-        {
-            switch (mission)
-            {
-                case SquadronMission.Intercept: return "▲";
-                case SquadronMission.Bombard: return "▼";
-                case SquadronMission.Escort: return "◆";
-                case SquadronMission.Recon: return "◇";
-                case SquadronMission.Assault: return "■";
-                default: return "●";
-            }
-        }
-
         private void BuildSquadronPanel()
         {
             var state = controller.Simulation.State;
             var panel = ui.PanelRect("SquadronPanel", ui.Root, new Vector2(20f, 20f), new Vector2(1880f, 232f), PanelColor);
             ui.Text("SquadronTitle", panel, l10n.T("ui.squadrons"), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
                 new Vector2(18f, 190f), new Vector2(300f, 32f), FontStyle.Bold);
-            ui.Text("InterceptCount", panel, $"▲ {l10n.T("ui.intercept")} {state.interceptCharges}   ·   {l10n.T("ui.ordnance")} {state.resources.ordnance}", 15, UiFactory.Aether, TextAnchor.MiddleRight,
-                new Vector2(1400f, 190f), new Vector2(460f, 32f), FontStyle.Bold);
+            ui.Icon("InterceptSummaryIcon", panel, GameIconLibrary.Wing(SquadronType.Interceptor), new Vector2(1412f, 191f), new Vector2(30f, 30f));
+            ui.Text("InterceptCount", panel, $"{l10n.T("ui.intercept")} {state.interceptCharges}   ·   {l10n.T("ui.ordnance")} {state.resources.ordnance}", 15, UiFactory.Aether, TextAnchor.MiddleRight,
+                new Vector2(1448f, 190f), new Vector2(412f, 32f), FontStyle.Bold);
             var tutorialHint = CombatTutorialHint(state);
             if (!string.IsNullOrEmpty(tutorialHint))
             {
@@ -841,15 +920,16 @@ namespace AetherArk.Runtime
                 var destroyed = squadron.status == SquadronStatus.Destroyed;
                 var busy = squadron.status == SquadronStatus.Launching || squadron.status == SquadronStatus.OnMission || squadron.status == SquadronStatus.Recovering;
 
-                // Slot card: glyph, name, status line, strength pips, ordnance cost.
+                // Slot card: role icon, name, status line, strength pips, ordnance cost.
                 var cardColor = destroyed ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : busy ? new Color(0.09f, 0.2f, 0.28f, 0.95f) : UiFactory.PanelSoft;
                 var card = ui.PanelRect("SquadCard_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), cardColor);
                 card.GetComponent<Image>().raycastTarget = false;
                 ui.Outline("SquadCardEdge_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), 1f,
                     destroyed ? UiFactory.Danger : busy ? UiFactory.Aether : new Color(0.3f, 0.36f, 0.42f, 0.9f));
-                var typeGlyph = squadron.type == SquadronType.Interceptor ? "▲" : squadron.type == SquadronType.Bomber ? "▼" : "◆";
-                ui.Text("SquadGlyph_" + squadron.id, card, typeGlyph, 30, destroyed ? UiFactory.Danger : UiFactory.Brass, TextAnchor.MiddleCenter,
-                    new Vector2(6f, 10f), new Vector2(48f, 56f), FontStyle.Bold);
+                var wing = ContentCatalog.GetWing(squadron.wingId);
+                var squadronType = wing != null ? wing.type : squadron.type;
+                ui.Icon("SquadIcon_" + squadron.id, card, GameIconLibrary.Wing(squadronType), new Vector2(6f, 14f), new Vector2(48f, 48f),
+                    destroyed ? new Color(0.55f, 0.25f, 0.25f, 1f) : Color.white);
                 ui.Text("SquadName_" + squadron.id, card, l10n.T(squadron.displayKey), 15, destroyed ? UiFactory.Danger : UiFactory.TextPrimary, TextAnchor.MiddleLeft,
                     new Vector2(58f, 44f), new Vector2(200f, 26f), FontStyle.Bold);
                 var strengthPips = new StringBuilder();
@@ -857,7 +937,7 @@ namespace AetherArk.Runtime
                 ui.Text("SquadStrength_" + squadron.id, card, strengthPips.ToString(), 13, squadron.strength <= 1 ? UiFactory.Danger : UiFactory.Aether, TextAnchor.MiddleRight,
                     new Vector2(250f, 44f), new Vector2(84f, 26f), FontStyle.Bold);
                 var statusLine = l10n.EnumName(squadron.status);
-                if (squadron.mission != SquadronMission.None && busy) statusLine += " · " + MissionGlyph(squadron.mission) + " " + l10n.EnumName(squadron.mission);
+                if (squadron.mission != SquadronMission.None && busy) statusLine += " · " + l10n.EnumName(squadron.mission);
                 if ((squadron.mission == SquadronMission.Bombard || squadron.mission == SquadronMission.Assault) && busy)
                     statusLine += " → " + l10n.T(state.enemyShip.GetSystem(squadron.targetSystem).displayKey);
                 ui.Text("SquadStatus_" + squadron.id, card, statusLine, 12, busy ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.MiddleLeft,
@@ -878,7 +958,7 @@ namespace AetherArk.Runtime
                     var mission = missions[m];
                     var localSquad = squadron.id;
                     var shortcut = mission == SquadronMission.Bombard && i < 2 ? $"[{i + 1}] " : string.Empty;
-                    var label = $"{MissionGlyph(mission)}  {shortcut}{l10n.T(keys[m])}";
+                    var label = $"{shortcut}{l10n.T(keys[m])}";
                     var color = mission == SquadronMission.Bombard ? new Color(0.43f, 0.18f, 0.11f, 0.98f)
                         : mission == SquadronMission.Assault ? new Color(0.36f, 0.14f, 0.3f, 0.98f)
                         : mission == SquadronMission.Intercept || mission == SquadronMission.Escort ? new Color(0.09f, 0.24f, 0.3f, 0.98f)
@@ -886,6 +966,8 @@ namespace AetherArk.Runtime
                     var button = ui.Button($"{squadron.id}_{mission}", panel, label, () => controller.LaunchSquadron(localSquad, mission, selectedEnemySystem),
                         new Vector2(376f + m * 298f, y + 8f), new Vector2(284f, 60f), color, UiFactory.TextPrimary, 16);
                     button.interactable = squadron.CanLaunch && state.resources.ordnance >= squadron.ordnanceCost && deckReady;
+                    ui.Icon($"MissionIcon_{squadron.id}_{mission}", panel, GameIconLibrary.Mission(mission),
+                        new Vector2(386f + m * 298f, y + 20f), new Vector2(36f, 36f), button.interactable ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f));
                 }
             }
             if (!deckReady)

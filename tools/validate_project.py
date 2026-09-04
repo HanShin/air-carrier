@@ -73,7 +73,28 @@ def validate_assets() -> None:
     for path in required:
         if not path.exists() or path.stat().st_size == 0:
             fail(f"missing required asset: {path.relative_to(ROOT)}")
-    print("OK: required scene, settings, and background assets")
+    ship_art = ROOT / "Assets/_Project/Resources/Art/Ships"
+    expected_silhouettes = {
+        "enemy_cutter", "enemy_carrier", "enemy_scout", "enemy_boarder", "enemy_lancer",
+        "enemy_minelayer", "enemy_firebrand", "enemy_cruiser", "enemy_monitor",
+        "enemy_dreadnought", "enemy_hive", "enemy_wraith", "enemy_warden",
+    }
+    present = {path.stem for path in ship_art.glob("*.png") if path.stat().st_size > 0}
+    missing = sorted(expected_silhouettes - present)
+    if missing:
+        fail("missing enemy silhouette art: " + ", ".join(missing))
+    expected_icons = {
+        "Modules": {"hull", "core", "weapons", "deck", "sensors", "engineering", "bridge", "marines"},
+        "Weapons": {"cannon", "lance", "piercer", "missile", "flak", "incendiary", "breacher"},
+        "Wings": {"interceptor", "bomber", "escort", "recon", "assault"},
+    }
+    for folder, expected in expected_icons.items():
+        icon_folder = ROOT / "Assets/_Project/Resources/Art/Icons" / folder
+        present_icons = {path.stem for path in icon_folder.glob("*.png") if path.stat().st_size > 0}
+        missing_icons = sorted(expected - present_icons)
+        if missing_icons:
+            fail(f"missing {folder.lower()} icons: " + ", ".join(missing_icons))
+    print(f"OK: required scene, settings, background, {len(expected_silhouettes)} ship silhouettes, and 20 equipment icons")
 
 
 def main() -> None:

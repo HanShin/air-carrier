@@ -19,6 +19,7 @@ internal static class HeadlessPlaythrough
         public bool Stalemate;
         public int Regions = 1;
         public string StalemateEnemy;
+        public string StalemateState;
         public int RegionReached = 1;
         public List<BattleRecord> BattleRecords = new List<BattleRecord>();
         public List<string> GateSnapshots = new List<string>();
@@ -58,7 +59,7 @@ internal static class HeadlessPlaythrough
         if (stalemates.Count > 0)
         {
             Console.Error.WriteLine($"STALEMATE in {stalemates.Count} run(s): a battle neither side could finish within the combat time cap.");
-            foreach (var result in stalemates) Console.Error.WriteLine($"  seed={result.Seed} enemy={result.StalemateEnemy} battles={result.Battles}");
+            foreach (var result in stalemates) Console.Error.WriteLine($"  seed={result.Seed} enemy={result.StalemateEnemy} battles={result.Battles} {result.StalemateState}");
             return 3;
         }
 
@@ -236,6 +237,12 @@ internal static class HeadlessPlaythrough
                         // The time cap expired with both ships alive: a stalemate is a design defect, not a loss.
                         result.Stalemate = true;
                         result.StalemateEnemy = simulation.State.enemyShip?.id;
+                        var player = simulation.State.playerShip;
+                        var enemy = simulation.State.enemyShip;
+                        result.StalemateState = $"player={player.hull:0.0}/{player.maxHull:0.0} ward={player.ward:0.0} weapons={player.GetSystem(ShipSystemType.Weapons)?.damage:0.0} power={player.GetSystem(ShipSystemType.Weapons)?.EffectivePower} " +
+                            $"enemy={enemy?.hull:0.0}/{enemy?.maxHull:0.0} ward={enemy?.ward:0.0} weapons={enemy?.GetSystem(ShipSystemType.Weapons)?.damage:0.0} " +
+                            $"activeCrew={simulation.State.crew.FindAll(crew => crew.IsActive).Count} ordnance={simulation.State.resources.ordnance} slots={simulation.State.weaponSlots.Count} " +
+                            $"slot0={(simulation.State.weaponSlots.Count > 0 ? simulation.State.weaponSlots[0].weaponId : "none")} cd0={(simulation.State.weaponSlots.Count > 0 ? simulation.State.weaponSlots[0].cooldown : 0f):0.0}";
                         goto done;
                     }
                     break;
@@ -283,6 +290,12 @@ internal static class HeadlessPlaythrough
 
     private static void ResolvePort(GameSimulation simulation)
     {
+        // A seventh and eighth specialist are a meaningful campaign investment; keep a small refit reserve.
+        var recruit = simulation.PortRecruitOffer();
+        if (recruit != null && CrewProgressionRules.ActiveCrewCount(simulation.State.crew) < CrewProgressionRules.MaxActiveCrew
+            && simulation.State.resources.salvage >= recruit.cost + 10)
+            simulation.RecruitCrew(recruit.id);
+
         var bought = true;
         while (bought)
         {

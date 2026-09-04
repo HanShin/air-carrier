@@ -161,6 +161,7 @@ namespace AetherArk.Core
         public bool isCaptain;
         public bool onSortie;
         public int skillLevel = 1;
+        public int experience;
 
         public bool IsActive => !isDead && health > 0f && !onSortie;
         public bool IsDowned => !isDead && health <= 0f;
@@ -441,6 +442,8 @@ namespace AetherArk.Core
         public int regionCount = 1;
         public int travelCount;
         public int totalTravelCount;
+        /// <summary>Region of the most recent port recruitment; zero means none. Only one recruit may join per port.</summary>
+        public int lastCrewRecruitRegion;
         public int stormColumn = -1;
         public string currentNodeId = "n0_1";
         public string activeEncounterId;

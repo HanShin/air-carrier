@@ -6,6 +6,7 @@ using AetherArk.Content;
 using AetherArk.Core;
 using AetherArk.Runtime;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace AetherArk.Tests
 {
@@ -317,6 +318,7 @@ namespace AetherArk.Tests
                 profile.language = Language.English;
                 var run = GameSimulation.NewRun(profile, 9981).State;
                 run.resources.salvage = 77;
+                run.crew[0].experience = 3;
 
                 service.SaveProfile(profile);
                 service.SaveRun(run);
@@ -326,6 +328,7 @@ namespace AetherArk.Tests
                 Assert.That(loadedProfile.language, Is.EqualTo(Language.English));
                 Assert.That(loadedRun.seed, Is.EqualTo(9981));
                 Assert.That(loadedRun.resources.salvage, Is.EqualTo(77));
+                Assert.That(loadedRun.crew[0].experience, Is.EqualTo(3));
                 Assert.That(loadedRun.routeNodes.Count, Is.EqualTo(run.routeNodes.Count));
             }
             finally
@@ -1771,6 +1774,9 @@ namespace AetherArk.Tests
                     var simulation = WingRun(pair.Item1);
                     simulation.State.random.combat = SeededRandom.Seed(seed, 0xC0B47u);
                     simulation.State.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 2; // raise the base loss chance
+                    var pilot = simulation.State.crew.Find(crew => crew.id == simulation.State.squadrons[0].pilotCrewId);
+                    pilot.traitKey = string.Empty;
+                    pilot.backgroundKey = string.Empty; // isolate the wing's resistance from crew identity modifiers
                     var before = simulation.State.squadrons[0].strength;
                     FlyMission(simulation, 0, SquadronMission.Intercept, ShipSystemType.FlightDeck);
                     if (simulation.State.squadrons[0].strength < before) { if (pair.Item2 == 0) lossesFragile++; else lossesTough++; }
@@ -1835,6 +1841,25 @@ namespace AetherArk.Tests
                 Assert.That(ship.nameKey, Is.EqualTo(definition.nameKey));
             }
             Assert.That(silhouettes.Count, Is.GreaterThanOrEqualTo(12));
+            foreach (var silhouette in silhouettes)
+                Assert.That(ShipBlueprintView.LoadHullSprite(silhouette), Is.Not.Null, silhouette + " has no silhouette art resource");
+        }
+
+        [Test]
+        public void EquipmentIconLibrary_HasEveryModuleWeaponAndWingCategory()
+        {
+            foreach (ModuleCategory category in Enum.GetValues(typeof(ModuleCategory)))
+                Assert.That(GameIconLibrary.Module(category), Is.Not.Null, "missing module icon " + category);
+            foreach (WeaponFamily family in Enum.GetValues(typeof(WeaponFamily)))
+                Assert.That(GameIconLibrary.Weapon(family), Is.Not.Null, "missing weapon icon " + family);
+            foreach (SquadronType type in Enum.GetValues(typeof(SquadronType)))
+                Assert.That(GameIconLibrary.Wing(type), Is.Not.Null, "missing wing icon " + type);
+
+            Assert.That(GameIconLibrary.Mission(SquadronMission.Intercept), Is.Not.Null);
+            Assert.That(GameIconLibrary.Mission(SquadronMission.Bombard), Is.Not.Null);
+            Assert.That(GameIconLibrary.Mission(SquadronMission.Escort), Is.Not.Null);
+            Assert.That(GameIconLibrary.Mission(SquadronMission.Recon), Is.Not.Null);
+            Assert.That(GameIconLibrary.Mission(SquadronMission.Assault), Is.Not.Null);
         }
 
         [Test]
@@ -1967,6 +1992,8 @@ namespace AetherArk.Tests
             simulation.BeginCombat(1, false);
             var resonator = simulation.State.crew.Find(crew => crew.role == CrewRole.Resonator);
             resonator.currentRoom = ShipSystemType.Weapons;
+            resonator.traitKey = string.Empty;
+            resonator.backgroundKey = string.Empty;
 
             var result = simulation.Overcharge(ShipSystemType.Weapons);
 
@@ -1989,6 +2016,172 @@ namespace AetherArk.Tests
             Assert.That(human.LaunchSquadron(humanWing.id, SquadronMission.Intercept, ShipSystemType.FlightDeck).success, Is.True);
             Assert.That(goblinWing.missionTimer, Is.LessThan(humanWing.missionTimer));
             Assert.That(goblinWing.missionTimer / humanWing.missionTimer, Is.EqualTo(0.82f).Within(0.01f));
+        }
+
+        [Test]
+        public void CrewIdentities_AllAuthoredKeysHaveLocalizedRules()
+        {
+            var korean = new LocalizationService(Language.Korean);
+            var english = new LocalizationService(Language.English);
+            var traitCount = 0;
+            var backgroundCount = 0;
+            foreach (var definition in TraitRules.AllTraits)
+            {
+                traitCount++;
+                Assert.That(korean.T(definition.id), Is.Not.EqualTo(definition.id));
+                Assert.That(english.T(definition.id), Is.Not.EqualTo(definition.id));
+                Assert.That(korean.T(definition.descriptionKey), Is.Not.EqualTo(definition.descriptionKey));
+                Assert.That(english.T(definition.descriptionKey), Is.Not.EqualTo(definition.descriptionKey));
+            }
+            foreach (var definition in TraitRules.AllBackgrounds)
+            {
+                backgroundCount++;
+                Assert.That(korean.T(definition.id), Is.Not.EqualTo(definition.id));
+                Assert.That(english.T(definition.id), Is.Not.EqualTo(definition.id));
+                Assert.That(korean.T(definition.descriptionKey), Is.Not.EqualTo(definition.descriptionKey));
+                Assert.That(english.T(definition.descriptionKey), Is.Not.EqualTo(definition.descriptionKey));
+            }
+            Assert.That(traitCount, Is.EqualTo(6));
+            Assert.That(backgroundCount, Is.EqualTo(6));
+
+            foreach (var crew in ContentCatalog.CreateCrew(Profile()))
+            {
+                Assert.That(TraitRules.GetTrait(crew.traitKey), Is.Not.Null, crew.id);
+                Assert.That(TraitRules.GetBackground(crew.backgroundKey), Is.Not.Null, crew.id);
+            }
+        }
+
+        [Test]
+        public void TraitAndBackgroundModifiers_StackWithoutChangingSaveContracts()
+        {
+            var crew = new CrewState { traitKey = "trait.quick_hands", backgroundKey = "background.dockwright" };
+            var modifiers = TraitRules.Modifiers(crew);
+            Assert.That(modifiers.repairMultiplier, Is.EqualTo(1.12f * 1.12f).Within(0.001f));
+
+            crew.traitKey = "trait.attuned";
+            crew.backgroundKey = "background.weather_scholar";
+            modifiers = TraitRules.Modifiers(crew);
+            Assert.That(modifiers.overchargeInstabilityMultiplier, Is.EqualTo(0.85f).Within(0.001f));
+            Assert.That(modifiers.weatherDamageMultiplier, Is.EqualTo(0.75f).Within(0.001f));
+
+            Assert.That(TraitRules.Modifiers(new CrewState()).repairMultiplier, Is.EqualTo(1f), "old saves with empty keys stay neutral");
+        }
+
+        [Test]
+        public void RescuerTrait_SlowsBleedoutForDownedCrewInTheSameRoom()
+        {
+            var simulation = GameSimulation.NewRun(Profile(), 8104);
+            simulation.BeginCombat(1, false);
+            var downed = simulation.State.crew.Find(crew => crew.role == CrewRole.Medic);
+            var rescuer = simulation.State.crew.Find(crew => crew.traitKey == "trait.rescuer");
+            downed.currentRoom = ShipSystemType.Weapons;
+            downed.health = 0f;
+            downed.downedSeconds = 0f;
+            rescuer.currentRoom = ShipSystemType.Weapons;
+            simulation.State.enemyWeaponCooldown = 100f;
+            simulation.State.enemySquadronCooldown = 100f;
+            simulation.State.weatherHazardTimer = 100f;
+            simulation.SetPaused(false);
+
+            simulation.Tick(0.1f);
+            Assert.That(downed.downedSeconds, Is.EqualTo(0.05f).Within(0.001f));
+
+            rescuer.traitKey = string.Empty;
+            rescuer.backgroundKey = string.Empty;
+            downed.downedSeconds = 0f;
+            simulation.Tick(0.1f);
+            Assert.That(downed.downedSeconds, Is.EqualTo(0.1f).Within(0.001f));
+        }
+
+        [Test]
+        public void CrewRecruitLibrary_HasSixLocalizedValidCandidates()
+        {
+            var korean = new LocalizationService(Language.Korean);
+            var english = new LocalizationService(Language.English);
+            var ids = new HashSet<string>();
+            foreach (var candidate in CrewLibrary.All)
+            {
+                Assert.That(ids.Add(candidate.id), Is.True, candidate.id);
+                Assert.That(candidate.cost, Is.GreaterThan(0));
+                Assert.That(korean.T(candidate.nameKey), Is.Not.EqualTo(candidate.nameKey));
+                Assert.That(english.T(candidate.nameKey), Is.Not.EqualTo(candidate.nameKey));
+                Assert.That(TraitRules.GetTrait(candidate.traitKey), Is.Not.Null);
+                Assert.That(TraitRules.GetBackground(candidate.backgroundKey), Is.Not.Null);
+                var crew = CrewLibrary.Create(candidate.id);
+                Assert.That(crew, Is.Not.Null);
+                Assert.That(crew.skillLevel, Is.EqualTo(1));
+                Assert.That(crew.health, Is.GreaterThan(0f));
+            }
+            Assert.That(ids.Count, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void PortRecruitment_IsDeterministicCostsSalvageAndHonorsCapacity()
+        {
+            var simulation = RunAtPort();
+            var comparison = RunAtPort();
+            var offer = simulation.PortRecruitOffer();
+            Assert.That(offer, Is.Not.Null);
+            Assert.That(comparison.PortRecruitOffer().id, Is.EqualTo(offer.id));
+
+            simulation.State.resources.salvage = 100;
+            var salvageBefore = simulation.State.resources.salvage;
+            var countBefore = simulation.State.crew.Count;
+            var result = simulation.RecruitCrew(offer.id);
+
+            Assert.That(result.success, Is.True);
+            Assert.That(simulation.State.resources.salvage, Is.EqualTo(salvageBefore - offer.cost));
+            Assert.That(simulation.State.crew.Count, Is.EqualTo(countBefore + 1));
+            Assert.That(simulation.State.crew.Find(crew => crew.id == offer.id).traitKey, Is.EqualTo(offer.traitKey));
+            Assert.That(simulation.PortRecruitOffer(), Is.Null, "a port allows only one recruit");
+            Assert.That(simulation.RecruitCrew(offer.id).messageKey, Is.EqualTo("command.recruit_joined"));
+
+            var fullSimulation = RunAtPort();
+            fullSimulation.State.resources.salvage = 100;
+            while (CrewProgressionRules.ActiveCrewCount(fullSimulation.State.crew) < CrewProgressionRules.MaxActiveCrew)
+            {
+                var index = fullSimulation.State.crew.Count;
+                fullSimulation.State.crew.Add(new CrewState { id = "capacity_" + index, displayName = "Capacity", health = 100f, maxHealth = 100f, skillLevel = 1 });
+            }
+            var next = fullSimulation.PortRecruitOffer();
+            Assert.That(next, Is.Not.Null);
+            Assert.That(fullSimulation.RecruitCrew(next.id).messageKey, Is.EqualTo("command.crew_capacity"));
+        }
+
+        [Test]
+        public void CombatVictory_AwardsExperienceAndLevelsOnlySurvivors()
+        {
+            var simulation = RunAgainst("enemy_cutter");
+            var survivor = simulation.State.crew.Find(crew => crew.role == CrewRole.Medic);
+            var fallen = simulation.State.crew.Find(crew => crew.role == CrewRole.Engineer);
+            survivor.skillLevel = 1;
+            survivor.experience = CrewProgressionRules.ExperienceNeeded(1) - 1;
+            fallen.isDead = true;
+            fallen.experience = 2;
+
+            WinCurrentBattle(simulation);
+
+            Assert.That(survivor.skillLevel, Is.EqualTo(2));
+            Assert.That(survivor.experience, Is.EqualTo(0));
+            Assert.That(fallen.experience, Is.EqualTo(2));
+            Assert.That(simulation.State.combatLog.Exists(entry => entry.key == "log.crew_level_up" && entry.argument == survivor.displayName), Is.True);
+        }
+
+        [Test]
+        public void CrewProgression_OldSaveDefaultsAndMaximumLevelAreSafe()
+        {
+            var state = GameSimulation.NewRun(Profile(), 8105).State;
+            var crew = state.crew[0];
+            crew.skillLevel = 0;
+            crew.experience = -4;
+            GameSimulation.EnsureCrewProgression(state);
+            Assert.That(crew.skillLevel, Is.EqualTo(1));
+            Assert.That(crew.experience, Is.EqualTo(0));
+
+            Assert.That(CrewProgressionRules.AddExperience(crew, 12), Is.True);
+            Assert.That(crew.skillLevel, Is.EqualTo(3));
+            Assert.That(crew.experience, Is.EqualTo(0));
+            Assert.That(CrewProgressionRules.AddExperience(crew, 99), Is.False);
         }
 
         private static ProfileState ProfileWithLineage(CrewLineage lineage)
