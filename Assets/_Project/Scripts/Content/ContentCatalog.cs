@@ -46,6 +46,7 @@ namespace AetherArk.Content
             public float hull, armor, ward;
             public int coreOutput;
             public bool boarding;
+            public string[] weapons;
             // Power per system in enum order: Bridge, AetherCore, LiftArray, Engines, Ward, Weapons, FlightDeck, Sensors, Infirmary, LifeSupport.
             public int[] power;
             public int[] maxPower;
@@ -55,37 +56,37 @@ namespace AetherArk.Content
         {
             new EnemyDefinition
             {
-                id = "enemy_cutter", displayName = "Imperial Pursuit Cutter", tier = 1, weight = 40,
+                id = "enemy_cutter", weapons = new[] { "aether_cannon" }, displayName = "Imperial Pursuit Cutter", tier = 1, weight = 40,
                 hull = 24f, armor = 10f, ward = 8f, coreOutput = 9,
                 power = new[] { 1, 0, 1, 2, 1, 3, 0, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
             },
             new EnemyDefinition
             {
-                id = "enemy_carrier", displayName = "Imperial Strike Carrier", tier = 1, weight = 20,
+                id = "enemy_carrier", weapons = new[] { "flak_battery" }, displayName = "Imperial Strike Carrier", tier = 1, weight = 20,
                 hull = 28f, armor = 12f, ward = 10f, coreOutput = 10,
                 power = new[] { 1, 0, 1, 1, 1, 1, 3, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 3, 4, 2, 1, 2 }
             },
             new EnemyDefinition
             {
-                id = "enemy_scout", displayName = "Imperial Scout Frigate", tier = 1, weight = 20,
+                id = "enemy_scout", weapons = new[] { "ward_lance" }, displayName = "Imperial Scout Frigate", tier = 1, weight = 20,
                 hull = 20f, armor = 8f, ward = 8f, coreOutput = 11,
                 power = new[] { 1, 0, 1, 3, 1, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 1, 3, 1, 2 }
             },
             new EnemyDefinition
             {
-                id = "enemy_boarder", displayName = "Imperial Boarding Barge", tier = 1, weight = 20, boarding = true,
+                id = "enemy_boarder", weapons = new[] { "ember_mortar" }, displayName = "Imperial Boarding Barge", tier = 1, weight = 20, boarding = true,
                 hull = 26f, armor = 12f, ward = 6f, coreOutput = 9,
                 power = new[] { 1, 0, 1, 1, 1, 1, 2, 0, 1, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 3, 3, 2, 1, 2 }
             },
             new EnemyDefinition
             {
-                id = "enemy_cruiser", displayName = "Imperial Storm Cruiser", tier = 2, weight = 60,
+                id = "enemy_cruiser", weapons = new[] { "heavy_cannon" }, displayName = "Imperial Storm Cruiser", tier = 2, weight = 60,
                 hull = 34f, armor = 18f, ward = 12f, coreOutput = 11,
                 power = new[] { 1, 0, 1, 2, 2, 3, 1, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
             },
             new EnemyDefinition
             {
-                id = "enemy_monitor", displayName = "Imperial Bulwark Monitor", tier = 2, weight = 40,
+                id = "enemy_monitor", weapons = new[] { "bolt_thrower" }, displayName = "Imperial Bulwark Monitor", tier = 2, weight = 40,
                 hull = 30f, armor = 22f, ward = 16f, coreOutput = 11,
                 power = new[] { 1, 0, 1, 1, 3, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 4, 4, 1, 3, 1, 2 }
             }
@@ -157,7 +158,66 @@ namespace AetherArk.Content
             };
             for (var i = 0; i < SystemOrder.Length; i++)
                 AddSystem(ship, SystemOrder[i], SystemKeys[i], definition.power[i], definition.maxPower[i]);
+            if (definition.weapons != null)
+                for (var i = 0; i < definition.weapons.Length; i++) ship.weaponSlots.Add(new WeaponSlotState { weaponId = definition.weapons[i] });
+            ship.weaponHardpoints = Math.Max(2, ship.weaponSlots.Count);
             return ship;
+        }
+
+        private static readonly Dictionary<string, WeaponDefinition> Weapons = BuildWeapons();
+
+        private static Dictionary<string, WeaponDefinition> BuildWeapons()
+        {
+            var result = new Dictionary<string, WeaponDefinition>();
+            WeaponLibrary.AddAll(result);
+            return result;
+        }
+
+        public static WeaponDefinition GetWeapon(string id)
+        {
+            return !string.IsNullOrEmpty(id) && Weapons.TryGetValue(id, out var weapon) ? weapon : null;
+        }
+
+        public static List<string> WeaponIds()
+        {
+            return new List<string>(Weapons.Keys);
+        }
+
+        public const string StartingWeapon = "aether_cannon";
+        public const string StartingSecondary = "ward_lance";
+
+        /// <summary>Two distinct weapons for a port, deterministic per seed and region, tiers at most regionIndex + 1.</summary>
+        public static List<string> OfferWeapons(int seed, int regionIndex, List<WeaponSlotState> mounted)
+        {
+            var random = SeededRandom.Seed(unchecked(seed + regionIndex * 7727), 0x5EA9u);
+            var pool = new List<string>();
+            var weights = new List<int>();
+            foreach (var pair in Weapons)
+            {
+                var alreadyMounted = false;
+                if (mounted != null) for (var i = 0; i < mounted.Count; i++) if (mounted[i].weaponId == pair.Key) alreadyMounted = true;
+                if (alreadyMounted || pair.Value.tier > regionIndex + 1) continue;
+                pool.Add(pair.Key);
+                weights.Add(pair.Value.tier <= regionIndex ? 3 : 1);
+            }
+            var offers = new List<string>();
+            while (offers.Count < 2 && pool.Count > 0)
+            {
+                var total = 0;
+                for (var i = 0; i < weights.Count; i++) total += weights[i];
+                var roll = SeededRandom.Range(ref random, 0, total);
+                var index = 0;
+                for (; index < weights.Count; index++)
+                {
+                    if (roll < weights[index]) break;
+                    roll -= weights[index];
+                }
+                if (index >= pool.Count) index = pool.Count - 1;
+                offers.Add(pool[index]);
+                pool.RemoveAt(index);
+                weights.RemoveAt(index);
+            }
+            return offers;
         }
 
         private static readonly Dictionary<string, ModuleDefinition> Modules = BuildModules();

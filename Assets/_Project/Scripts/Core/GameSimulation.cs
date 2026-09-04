@@ -36,6 +36,7 @@ namespace AetherArk.Core
                 }
             };
 
+            EnsureLoadout(state);
             if (profile.tutorialSeen) ContentCatalog.AssignEncounterVariants(state.routeNodes, seed);
 
             if (profile.difficulty == Difficulty.Story)
@@ -53,6 +54,20 @@ namespace AetherArk.Core
             }
 
             return new GameSimulation(state);
+        }
+
+        /// <summary>Mounts the starting cannon when a run has no weapons (new runs and saves from before weapons existed).</summary>
+        public static void EnsureLoadout(RunState state)
+        {
+            if (state == null) return;
+            if (state.weaponSlots == null) state.weaponSlots = new List<WeaponSlotState>();
+            if (state.weaponSlots.Count == 0)
+            {
+                state.weaponSlots.Add(new WeaponSlotState { weaponId = ContentCatalog.StartingWeapon });
+                // The locked tutorial expedition carries the lance too, so the slot system is taught from the first battle.
+                if (state.isFirstExpedition) state.weaponSlots.Add(new WeaponSlotState { weaponId = ContentCatalog.StartingSecondary });
+            }
+            if (state.playerShip != null && state.playerShip.weaponHardpoints < 1) state.playerShip.weaponHardpoints = 2;
         }
 
         public CommandResult Execute(IGameCommand command)
@@ -225,6 +240,37 @@ namespace AetherArk.Core
             return ContentCatalog.OfferModules(State.seed, State.regionIndex, State.installedModules);
         }
 
+        public List<string> PortWeaponOffers()
+        {
+            return ContentCatalog.OfferWeapons(State.seed, State.regionIndex, State.weaponSlots);
+        }
+
+        /// <summary>Mounts into the first empty hardpoint, or replaces the last hardpoint and refunds half of the old weapon's cost.</summary>
+        public CommandResult PurchaseWeapon(string weaponId)
+        {
+            if (State.phase != GamePhase.Port) return CommandResult.Fail("command.port_only");
+            var weapon = ContentCatalog.GetWeapon(weaponId);
+            if (weapon == null) return CommandResult.Fail("command.weapon_unknown");
+            for (var i = 0; i < State.weaponSlots.Count; i++)
+                if (State.weaponSlots[i].weaponId == weaponId) return CommandResult.Fail("command.weapon_mounted");
+            if (State.resources.salvage < weapon.cost) return CommandResult.Fail("command.module_cost");
+            State.resources.salvage -= weapon.cost;
+            if (State.weaponSlots.Count < State.playerShip.weaponHardpoints)
+            {
+                State.weaponSlots.Add(new WeaponSlotState { weaponId = weaponId });
+            }
+            else
+            {
+                var last = State.weaponSlots[State.weaponSlots.Count - 1];
+                var old = ContentCatalog.GetWeapon(last.weaponId);
+                if (old != null) State.resources.salvage += old.cost / 2;
+                last.weaponId = weaponId;
+                last.cooldown = 0f;
+            }
+            AddLog("log.weapon_mounted", weapon.nameKey);
+            return CommandResult.Ok("command.weapon_bought");
+        }
+
         public CommandResult DepartPort()
         {
             if (State.phase != GamePhase.Port) return CommandResult.Fail("command.invalid_phase");
@@ -294,6 +340,10 @@ namespace AetherArk.Core
             State.combatElapsed = 0f;
             State.playerWeaponCooldown = 0f;
             State.enemyWeaponCooldown = finalBattle ? 3f : 4.5f;
+            EnsureLoadout(State);
+            for (var i = 0; i < State.weaponSlots.Count; i++) State.weaponSlots[i].cooldown = 0f;
+            if (State.enemyShip.weaponSlots != null)
+                for (var i = 0; i < State.enemyShip.weaponSlots.Count; i++) State.enemyShip.weaponSlots[i].cooldown = (finalBattle ? 3f : 4.5f) + i * 1.5f;
             State.enemySquadronCooldown = 10f;
             State.altitudeCooldown = 0f;
             State.weatherHazardTimer = ContentCatalog.GetWeather(State.currentWeather).hazardInterval;
@@ -324,6 +374,9 @@ namespace AetherArk.Core
             State.combatElapsed += dt;
             State.playerWeaponCooldown = Math.Max(0f, State.playerWeaponCooldown - dt);
             State.enemyWeaponCooldown = Math.Max(0f, State.enemyWeaponCooldown - dt);
+            for (var i = 0; i < State.weaponSlots.Count; i++) State.weaponSlots[i].cooldown = Math.Max(0f, State.weaponSlots[i].cooldown - dt);
+            if (State.enemyShip?.weaponSlots != null)
+                for (var i = 0; i < State.enemyShip.weaponSlots.Count; i++) State.enemyShip.weaponSlots[i].cooldown = Math.Max(0f, State.enemyShip.weaponSlots[i].cooldown - dt);
             State.enemySquadronCooldown = Math.Max(0f, State.enemySquadronCooldown - dt);
             State.altitudeCooldown = Math.Max(0f, State.altitudeCooldown - dt);
             State.reconBonusSeconds = Math.Max(0f, State.reconBonusSeconds - dt);
@@ -341,7 +394,7 @@ namespace AetherArk.Core
 
             State.playerShip.instability = Math.Max(0f, State.playerShip.instability - dt * 0.45f * ModuleRules.Modifiers(State).instabilityDecay);
             if (State.weatherHazardTimer <= 0f) ResolveWeatherHazard();
-            if (State.enemyWeaponCooldown <= 0f) EnemyFire();
+            EnemyFire();
             if (State.enemySquadronCooldown <= 0f) EnemySquadronStrike();
 
             if (State.enemyShip != null && State.enemyShip.IsDestroyed) ResolveVictory();
@@ -541,18 +594,64 @@ namespace AetherArk.Core
             return CommandResult.Ok("command.crew_moved");
         }
 
-        public CommandResult FireMainWeapon(ShipSystemType target)
+        /// <summary>Slots are powered in order while their summed power cost fits the Weapons system's effective power.</summary>
+        public bool IsWeaponPowered(int slot)
+        {
+            return IsWeaponPowered(State.playerShip, State.weaponSlots, slot);
+        }
+
+        /// <summary>Weapons power beyond what the mounted weapons need; each spare point speeds every reload.</summary>
+        public static int SparePower(ShipState ship, List<WeaponSlotState> slots)
+        {
+            var weapons = ship?.GetSystem(ShipSystemType.Weapons);
+            var budget = weapons?.EffectivePower ?? 0;
+            var used = 0;
+            if (slots != null)
+                for (var i = 0; i < slots.Count; i++)
+                {
+                    var definition = ContentCatalog.GetWeapon(slots[i].weaponId);
+                    if (definition != null) used += definition.powerCost;
+                }
+            return Math.Max(0, budget - used);
+        }
+
+        private static bool IsWeaponPowered(ShipState ship, List<WeaponSlotState> slots, int slot)
+        {
+            if (ship == null || slots == null || slot < 0 || slot >= slots.Count) return false;
+            var weapons = ship.GetSystem(ShipSystemType.Weapons);
+            var budget = weapons?.EffectivePower ?? 0;
+            var used = 0;
+            for (var i = 0; i <= slot; i++)
+            {
+                var definition = ContentCatalog.GetWeapon(slots[i].weaponId);
+                if (definition == null) continue;
+                used += definition.powerCost;
+                if (i == slot) return used <= budget;
+            }
+            return false;
+        }
+
+        public CommandResult FireWeapon(int slot, ShipSystemType target)
         {
             if (State.phase != GamePhase.Combat || State.enemyShip == null) return CommandResult.Fail("command.invalid_phase");
-            var weapons = State.playerShip.GetSystem(ShipSystemType.Weapons);
-            if (weapons == null || weapons.EffectivePower <= 0) return CommandResult.Fail("command.weapons_unpowered");
-            if (State.playerWeaponCooldown > 0f) return CommandResult.Fail("command.weapon_cooldown");
+            if (slot < 0 || slot >= State.weaponSlots.Count) return CommandResult.Fail("command.invalid_slot");
+            var mount = State.weaponSlots[slot];
+            var weapon = ContentCatalog.GetWeapon(mount.weaponId);
+            if (weapon == null) return CommandResult.Fail("command.weapon_unknown");
+            if (!IsWeaponPowered(slot)) return CommandResult.Fail("command.weapon_unpowered");
+            if (mount.cooldown > 0f) return CommandResult.Fail("command.weapon_cooldown");
+            if (weapon.ordnancePerShot > 0 && State.resources.ordnance < weapon.ordnancePerShot) return CommandResult.Fail("command.no_ordnance");
 
             State.selectedEnemySystem = target;
             State.hasFiredWeapon = true;
-            State.playerWeaponCooldown = Math.Max(2.2f, 5.2f - weapons.EffectivePower * 0.55f) * ModuleRules.Modifiers(State).weaponCooldown;
+            State.resources.ordnance -= weapon.ordnancePerShot;
+            var modifiers = ModuleRules.Modifiers(State);
+            mount.cooldown = weapon.cooldown * modifiers.weaponCooldown / (1f + 0.2f * SparePower(State.playerShip, State.weaponSlots));
+            State.playerWeaponCooldown = mount.cooldown;
+            State.interceptCharges += weapon.interceptCharge;
+
             var random = State.random.combat;
-            var hit = SeededRandom.Chance(ref random, Accuracy(State.playerShip, State.enemyShip, true));
+            var hit = SeededRandom.Chance(ref random, Clamp(Accuracy(State.playerShip, State.enemyShip, true) + weapon.accuracyBonus, 0.2f, 0.98f));
             State.random.combat = random;
             if (!hit)
             {
@@ -560,54 +659,136 @@ namespace AetherArk.Core
                 return CommandResult.Ok("command.weapon_fired");
             }
 
-            ApplyDamage(State.enemyShip, target, PlayerShotDamage(), false);
+            ApplyWeaponHit(weapon, State.enemyShip, target, weapon.damage * modifiers.weaponDamage);
             AddLog("log.player_hit", target.ToString());
             if (State.enemyShip.IsDestroyed) ResolveVictory();
             return CommandResult.Ok("command.weapon_fired");
         }
 
-        /// <summary>Main-battery damage per hit: base by weapon power, multiplied by installed weapon modules.</summary>
+        /// <summary>Fires every powered, ready slot at the target. Succeeds if at least one weapon fired.</summary>
+        public CommandResult FireAllReady(ShipSystemType target)
+        {
+            var fired = false;
+            CommandResult last = CommandResult.Fail("command.weapon_cooldown");
+            for (var i = 0; i < State.weaponSlots.Count && State.phase == GamePhase.Combat; i++)
+            {
+                var result = FireWeapon(i, target);
+                if (result.success) fired = true; else last = result;
+            }
+            return fired ? CommandResult.Ok("command.weapon_fired") : last;
+        }
+
+        /// <summary>Compatibility alias: fires every ready weapon.</summary>
+        public CommandResult FireMainWeapon(ShipSystemType target)
+        {
+            return FireAllReady(target);
+        }
+
+        /// <summary>Damage of the first mounted weapon per hit, for display and tests.</summary>
         public float PlayerShotDamage()
         {
-            var weapons = State.playerShip?.GetSystem(ShipSystemType.Weapons);
-            if (weapons == null) return 0f;
-            return (3.5f + weapons.EffectivePower * 0.7f) * ModuleRules.Modifiers(State).weaponDamage;
+            if (State.weaponSlots.Count == 0) return 0f;
+            var weapon = ContentCatalog.GetWeapon(State.weaponSlots[0].weaponId);
+            return weapon == null ? 0f : weapon.damage * ModuleRules.Modifiers(State).weaponDamage;
+        }
+
+        /// <summary>
+        /// Layered hit with weapon traits: the ward absorbs at wardMultiplier unless ignored, the piercing fraction
+        /// skips armor, and what reaches the hull damages the targeted system (scaled) and may start a fire or breach.
+        /// </summary>
+        public void ApplyWeaponHit(WeaponDefinition weapon, ShipState defender, ShipSystemType target, float amount)
+        {
+            if (weapon == null || defender == null || amount <= 0f) return;
+            defender.wardRechargeSeconds = WardRechargeDelay;
+            var remaining = amount;
+            if (!weapon.ignoresWard && defender.ward > 0f)
+            {
+                var wardHit = remaining * weapon.wardMultiplier;
+                var absorbed = Math.Min(defender.ward, wardHit);
+                defender.ward -= absorbed;
+                remaining -= absorbed / Math.Max(0.01f, weapon.wardMultiplier);
+            }
+            if (remaining <= 0f) return;
+
+            var piercing = remaining * Clamp(weapon.armorPiercing, 0f, 1f);
+            var againstArmor = remaining - piercing;
+            if (againstArmor > 0f && defender.armor > 0f)
+            {
+                var absorbed = Math.Min(defender.armor, againstArmor);
+                defender.armor -= absorbed;
+                againstArmor -= absorbed;
+            }
+            var toHull = piercing + againstArmor;
+            if (toHull <= 0f) return;
+
+            defender.hull = Math.Max(0f, defender.hull - toHull);
+            var system = defender.GetSystem(target);
+            if (system != null) system.damage = Math.Min(system.maxDamage, system.damage + toHull * 12f * weapon.systemDamageMultiplier);
+            var room = defender.GetRoom(target);
+            if (room != null)
+            {
+                var random = State.random.combat;
+                if (SeededRandom.Chance(ref random, Clamp(0.34f + weapon.fireChance * 0.66f, 0f, 1f) * (weapon.fireChance > 0f ? 1f : 1f)))
+                    room.fire = Math.Min(100f, room.fire + toHull * 8f + weapon.fireChance * 12f);
+                if (SeededRandom.Chance(ref random, Clamp(0.22f + weapon.breachChance * 0.78f, 0f, 1f)))
+                    room.breach = Math.Min(100f, room.breach + toHull * 7f + weapon.breachChance * 12f);
+                State.random.combat = random;
+            }
+            if (defender == State.playerShip)
+                RaiseCombatAlert("alert.hull_breached", target.ToString(), defender.hull <= defender.maxHull * 0.3f ? AlertSeverity.Critical : AlertSeverity.Warning, true);
         }
 
         private void EnemyFire()
         {
-            if (State.enemyShip == null) return;
-            var weapons = State.enemyShip.GetSystem(ShipSystemType.Weapons);
-            if (weapons == null || weapons.EffectivePower <= 0)
+            var enemy = State.enemyShip;
+            if (enemy == null) return;
+            if (enemy.weaponSlots == null || enemy.weaponSlots.Count == 0)
             {
-                State.enemyWeaponCooldown = 1f;
-                return;
+                enemy.weaponSlots = new List<WeaponSlotState> { new WeaponSlotState { weaponId = ContentCatalog.StartingWeapon } };
             }
-
-            State.enemyWeaponCooldown = State.isFinalBattle ? 3.2f : 4.3f;
-            var random = State.random.combat;
-            var targets = State.playerShip.systems;
-            var target = targets[SeededRandom.Range(ref random, 0, targets.Count)].type;
-            var hit = SeededRandom.Chance(ref random, Accuracy(State.enemyShip, State.playerShip, false));
-            State.random.combat = random;
-            if (!hit)
+            var scale = EnemyDamageMultiplier();
+            for (var i = 0; i < enemy.weaponSlots.Count && State.phase == GamePhase.Combat; i++)
             {
-                AddLog("log.enemy_miss");
-                return;
-            }
+                var mount = enemy.weaponSlots[i];
+                if (mount.cooldown > 0f) continue;
+                var weapon = ContentCatalog.GetWeapon(mount.weaponId);
+                if (weapon == null) { mount.cooldown = 5f; continue; }
+                if (!IsWeaponPowered(enemy, enemy.weaponSlots, i)) { mount.cooldown = 1f; continue; }
+                mount.cooldown = weapon.cooldown * (State.isFinalBattle ? 0.85f : 1f);
 
-            ApplyDamage(State.playerShip, target, EnemyShotDamage(), false);
-            AddLog("log.enemy_hit", target.ToString());
+                var random = State.random.combat;
+                var targets = State.playerShip.systems;
+                var target = targets[SeededRandom.Range(ref random, 0, targets.Count)].type;
+                var hit = SeededRandom.Chance(ref random, Clamp(Accuracy(enemy, State.playerShip, false) + weapon.accuracyBonus, 0.2f, 0.96f));
+                State.random.combat = random;
+                if (!hit)
+                {
+                    AddLog("log.enemy_miss");
+                    continue;
+                }
+                ApplyWeaponHit(weapon, State.playerShip, target, weapon.damage * scale);
+                AddLog("log.enemy_hit", target.ToString());
+            }
+            // Keep the legacy forecast field meaningful: time until the next enemy shot.
+            var next = float.MaxValue;
+            for (var i = 0; i < enemy.weaponSlots.Count; i++) next = Math.Min(next, enemy.weaponSlots[i].cooldown);
+            State.enemyWeaponCooldown = next == float.MaxValue ? 1f : next;
         }
 
-        /// <summary>Enemy main-battery damage: base by weapon power, scaled by difficulty and by the region multiplier.</summary>
+        public float EnemyDamageMultiplier()
+        {
+            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.72f : State.difficulty == Difficulty.Harsh ? 1.15f : 1f;
+            return difficultyMultiplier * ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
+        }
+
+        /// <summary>Damage of the enemy's first mounted weapon per hit, scaled by difficulty and region.</summary>
         public float EnemyShotDamage()
         {
-            var weapons = State.enemyShip?.GetSystem(ShipSystemType.Weapons);
-            if (weapons == null) return 0f;
-            var difficultyMultiplier = State.difficulty == Difficulty.Story ? 0.78f : State.difficulty == Difficulty.Harsh ? 1.22f : 1f;
-            var regionMultiplier = ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
-            return (2.4f + weapons.EffectivePower * 0.5f) * difficultyMultiplier * regionMultiplier;
+            var enemy = State.enemyShip;
+            if (enemy == null) return 0f;
+            var id = enemy.weaponSlots != null && enemy.weaponSlots.Count > 0 ? enemy.weaponSlots[0].weaponId : ContentCatalog.StartingWeapon;
+            var weapon = ContentCatalog.GetWeapon(id);
+            return weapon == null ? 0f : weapon.damage * EnemyDamageMultiplier();
         }
 
         private float Accuracy(ShipState attacker, ShipState defender, bool playerAttack)

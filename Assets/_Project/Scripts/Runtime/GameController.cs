@@ -385,6 +385,8 @@ namespace AetherArk.Runtime
         }
         public void ChangePower(ShipSystemType type, int delta) => Apply(() => Simulation.Execute(new SetPowerCommand(type, delta)));
         public void Fire(ShipSystemType target) => Apply(() => Simulation.Execute(new FireWeaponCommand(target)));
+        public void FireSlot(int slot, ShipSystemType target) => Apply(() => Simulation.FireWeapon(slot, target));
+        public void PurchaseWeapon(string weaponId) => Apply(() => Simulation.PurchaseWeapon(weaponId));
         public void ChangeAltitude(AltitudeBand altitude) => Apply(() => Simulation.Execute(new ChangeAltitudeCommand(altitude)));
         public void MoveCrew(string crewId, ShipSystemType room) => Apply(() => Simulation.Execute(new MoveCrewCommand(crewId, room)));
         public void Overcharge(ShipSystemType type) => Apply(() => Simulation.Execute(new OverchargeCommand(type)));

@@ -1288,6 +1288,221 @@ namespace AetherArk.Tests
             Assert.That(TimeToClear(true), Is.LessThan(TimeToClear(false) * 0.75f));
         }
 
+        [Test]
+        public void WeaponLibrary_HasEighteenLocalizedValidWeapons()
+        {
+            var ids = ContentCatalog.WeaponIds();
+            Assert.That(ids.Count, Is.GreaterThanOrEqualTo(18));
+            var ko = new LocalizationService(Language.Korean);
+            var en = new LocalizationService(Language.English);
+            foreach (var id in ids)
+            {
+                var weapon = ContentCatalog.GetWeapon(id);
+                Assert.That(ko.T(weapon.nameKey), Is.Not.EqualTo(weapon.nameKey), id);
+                Assert.That(en.T(weapon.nameKey), Is.Not.EqualTo(weapon.nameKey), id);
+                Assert.That(ko.T(weapon.descriptionKey), Is.Not.EqualTo(weapon.descriptionKey), id);
+                Assert.That(weapon.damage, Is.GreaterThan(0f), id);
+                Assert.That(weapon.cooldown, Is.GreaterThan(0f), id);
+                Assert.That(weapon.powerCost, Is.InRange(1, 3), id);
+                Assert.That(weapon.cost, Is.GreaterThan(0), id);
+            }
+        }
+
+        [Test]
+        public void Loadout_NewRunMountsTheAetherCannonAndOldSavesAreBackfilled()
+        {
+            var tutorialProfile = Profile(Difficulty.Story);
+            tutorialProfile.tutorialSeen = false;
+            var tutorial = GameSimulation.NewRun(tutorialProfile, GameSimulation.FirstExpeditionSeed).State;
+            Assert.That(tutorial.weaponSlots.Count, Is.EqualTo(2), "the tutorial expedition mounts both starting weapons to teach the slots");
+            Assert.That(tutorial.weaponSlots[1].weaponId, Is.EqualTo("ward_lance"));
+
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var state = GameSimulation.NewRun(profile, 4).State;
+            Assert.That(state.weaponSlots.Count, Is.EqualTo(1), "later expeditions start with one weapon; the second hardpoint is bought at a port");
+            Assert.That(state.weaponSlots[0].weaponId, Is.EqualTo("aether_cannon"));
+            Assert.That(state.playerShip.weaponHardpoints, Is.EqualTo(2));
+
+            var root = Path.Combine(Path.GetTempPath(), "aether-ark-weapons-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var service = new SaveService(root);
+                state.weaponSlots.Clear(); // simulate a save written before weapons existed
+                service.SaveRun(state);
+                var loaded = service.LoadRun();
+                Assert.That(loaded.weaponSlots.Count, Is.EqualTo(1));
+                Assert.That(loaded.weaponSlots[0].weaponId, Is.EqualTo("aether_cannon"));
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        private static GameSimulation ArmedRun(params string[] weaponIds)
+        {
+            var simulation = RunAgainst("enemy_cutter");
+            var state = simulation.State;
+            IsolateFromOtherThreats(state);
+            state.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 0;
+            state.weaponSlots.Clear();
+            foreach (var id in weaponIds) state.weaponSlots.Add(new WeaponSlotState { weaponId = id });
+            state.playerShip.weaponHardpoints = Math.Max(2, weaponIds.Length);
+            return simulation;
+        }
+
+        [Test]
+        public void Power_GatesMountedWeaponsInSlotOrder()
+        {
+            var simulation = ArmedRun("aether_cannon", "heavy_cannon"); // costs 2 + 2
+            var weapons = simulation.State.playerShip.GetSystem(ShipSystemType.Weapons);
+            weapons.power = 2;
+            Assert.That(simulation.IsWeaponPowered(0), Is.True);
+            Assert.That(simulation.IsWeaponPowered(1), Is.False);
+            Assert.That(simulation.FireWeapon(1, ShipSystemType.Weapons).success, Is.False, "an unpowered slot cannot fire");
+            weapons.power = 4;
+            Assert.That(simulation.IsWeaponPowered(1), Is.True);
+        }
+
+        [Test]
+        public void Fire_UsesPerSlotCooldownsAndFireAllFiresEveryReadySlot()
+        {
+            var simulation = ArmedRun("aether_cannon", "ward_lance");
+            simulation.State.playerShip.GetSystem(ShipSystemType.Weapons).power = 4;
+            Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.True);
+            Assert.That(simulation.State.weaponSlots[0].cooldown, Is.GreaterThan(0f));
+            Assert.That(simulation.State.weaponSlots[1].cooldown, Is.EqualTo(0f));
+            Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.False, "slot 0 is cooling down");
+            Assert.That(simulation.FireAllReady(ShipSystemType.Weapons).success, Is.True, "slot 1 is still ready");
+            Assert.That(simulation.State.weaponSlots[1].cooldown, Is.GreaterThan(0f));
+            Assert.That(simulation.State.hasFiredWeapon, Is.True);
+        }
+
+        private static float TotalDamageTaken(ShipState before, ShipState after)
+        {
+            return (before.ward - after.ward) + (before.armor - after.armor) + (before.hull - after.hull);
+        }
+
+        [Test]
+        public void WeaponFamilies_LancesStripWardsAndPiercersBiteArmor()
+        {
+            var lanceRun = ArmedRun("ward_lance");
+            var lance = ContentCatalog.GetWeapon("ward_lance");
+            var enemy = lanceRun.State.enemyShip;
+            enemy.ward = 20f; enemy.maxWard = 20f;
+            lanceRun.ApplyWeaponHit(lance, enemy, ShipSystemType.Weapons, lance.damage);
+            Assert.That(20f - enemy.ward, Is.EqualTo(lance.damage * lance.wardMultiplier).Within(0.01f), "a lance hits wards with its multiplier");
+
+            var piercerRun = ArmedRun("bolt_thrower");
+            var piercer = ContentCatalog.GetWeapon("bolt_thrower");
+            var target = piercerRun.State.enemyShip;
+            target.ward = 0f; target.armor = 30f; target.maxArmor = 30f;
+            var hullBefore = target.hull;
+            piercerRun.ApplyWeaponHit(piercer, target, ShipSystemType.Weapons, piercer.damage);
+            Assert.That(hullBefore - target.hull, Is.EqualTo(piercer.damage * piercer.armorPiercing).Within(0.01f), "the piercing fraction bypasses armor");
+            Assert.That(30f - target.armor, Is.EqualTo(piercer.damage * (1f - piercer.armorPiercing)).Within(0.01f));
+        }
+
+        [Test]
+        public void Missiles_IgnoreWardsAndConsumeOrdnance()
+        {
+            var simulation = ArmedRun("rocket_pod");
+            var state = simulation.State;
+            state.playerShip.GetSystem(ShipSystemType.Weapons).power = 4;
+            var rocket = ContentCatalog.GetWeapon("rocket_pod");
+            Assert.That(rocket.ignoresWard, Is.True);
+            Assert.That(rocket.ordnancePerShot, Is.EqualTo(1));
+            state.resources.ordnance = 1;
+            Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.True);
+            Assert.That(state.resources.ordnance, Is.EqualTo(0));
+            state.weaponSlots[0].cooldown = 0f;
+            Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.False, "no ordnance left");
+
+            var enemy = state.enemyShip;
+            enemy.ward = 10f; enemy.armor = 0f;
+            var hullBefore = enemy.hull;
+            simulation.ApplyWeaponHit(rocket, enemy, ShipSystemType.Weapons, rocket.damage);
+            Assert.That(enemy.ward, Is.EqualTo(10f).Within(0.001f), "missiles bypass the ward entirely");
+            Assert.That(hullBefore - enemy.hull, Is.EqualTo(rocket.damage).Within(0.01f));
+        }
+
+        [Test]
+        public void Flak_GrantsAnInterceptChargePerShot()
+        {
+            var simulation = ArmedRun("flak_battery");
+            var state = simulation.State;
+            state.playerShip.GetSystem(ShipSystemType.Weapons).power = 4;
+            state.interceptCharges = 0;
+            Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.True);
+            Assert.That(state.interceptCharges, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Port_SellsWeaponsIntoHardpointsAndReplacesTheLastOneWithARefund()
+        {
+            var profile = Profile();
+            profile.tutorialSeen = true;
+            var simulation = GameSimulation.NewRun(profile, 606);
+            var state = simulation.State;
+            simulation.BeginCombat(2, true);
+            WinCurrentBattle(simulation);
+            Assert.That(state.phase, Is.EqualTo(GamePhase.Port));
+
+            var offers = simulation.PortWeaponOffers();
+            Assert.That(offers.Count, Is.EqualTo(2));
+            Assert.That(offers, Is.EqualTo(simulation.PortWeaponOffers()), "offers are deterministic");
+            state.resources.salvage = 200;
+            var first = ContentCatalog.GetWeapon(offers[0]);
+            var salvageBefore = state.resources.salvage;
+            Assert.That(simulation.PurchaseWeapon(offers[0]).success, Is.True);
+            Assert.That(state.weaponSlots.Count, Is.EqualTo(2));
+            Assert.That(state.weaponSlots[1].weaponId, Is.EqualTo(offers[0]));
+            Assert.That(state.resources.salvage, Is.EqualTo(salvageBefore - first.cost));
+
+            var second = ContentCatalog.GetWeapon(offers[1]);
+            var replaced = ContentCatalog.GetWeapon(state.weaponSlots[state.weaponSlots.Count - 1].weaponId);
+            salvageBefore = state.resources.salvage;
+            Assert.That(simulation.PurchaseWeapon(offers[1]).success, Is.True, "a full loadout replaces the last hardpoint");
+            Assert.That(state.weaponSlots.Count, Is.EqualTo(2));
+            Assert.That(state.weaponSlots[1].weaponId, Is.EqualTo(offers[1]));
+            Assert.That(state.resources.salvage, Is.EqualTo(salvageBefore - second.cost + replaced.cost / 2));
+            Assert.That(simulation.PurchaseWeapon(offers[1]).success, Is.False, "already mounted");
+        }
+
+        [Test]
+        public void EnemyLoadouts_FireThroughTheSameWeaponRules()
+        {
+            var simulation = RunAgainst("enemy_cruiser");
+            var state = simulation.State;
+            Assert.That(state.enemyShip.weaponSlots.Count, Is.GreaterThanOrEqualTo(1));
+            state.currentWeather = WeatherType.Clear;
+            state.weatherHazardTimer = 999f;
+            state.enemyShip.GetSystem(ShipSystemType.FlightDeck).power = 0;
+            state.playerShip.ward = 0f; state.playerShip.armor = 0f;
+            state.playerShip.GetSystem(ShipSystemType.Ward).power = 0;
+            var hullBefore = state.playerShip.hull;
+            simulation.SetPaused(false);
+            for (var i = 0; i < 300; i++) simulation.Tick(0.1f);
+            Assert.That(state.playerShip.hull, Is.LessThan(hullBefore), "enemy weapons should land within thirty seconds");
+            Assert.That(state.combatLog.Exists(entry => entry.key == "log.enemy_hit"), Is.True);
+        }
+
+        [Test]
+        public void SparePower_ShortensWeaponCooldowns()
+        {
+            var simulation = ArmedRun("aether_cannon"); // costs 2
+            var weapons = simulation.State.playerShip.GetSystem(ShipSystemType.Weapons);
+            var cannon = ContentCatalog.GetWeapon("aether_cannon");
+
+            weapons.power = 2;
+            Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.True);
+            Assert.That(simulation.State.weaponSlots[0].cooldown, Is.EqualTo(cannon.cooldown).Within(0.001f), "no spare power: base cooldown");
+
+            simulation.State.weaponSlots[0].cooldown = 0f;
+            weapons.power = 4; // two spare points
+            Assert.That(simulation.FireWeapon(0, ShipSystemType.Weapons).success, Is.True);
+            Assert.That(simulation.State.weaponSlots[0].cooldown, Is.LessThan(cannon.cooldown * 0.85f), "spare weapons power should speed reloading");
+        }
+
         [TestCase(WeatherType.Thunderhead, -0.08f)]
         [TestCase(WeatherType.Turbulence, -0.12f)]
         [TestCase(WeatherType.AetherCurrent, 0.04f)]

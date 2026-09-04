@@ -47,6 +47,7 @@ namespace AetherArk.Content
         {
             AddEncounterStrings();
             AddModuleStrings();
+            AddWeaponStrings();
             Add("game.title", "에테르 아크", "AETHER ARK");
             Add("game.subtitle", "천공 피난선단 지휘 프로토타입", "Sky Convoy Command Prototype");
             Add("menu.new_run", "새 원정", "New Expedition");
@@ -102,6 +103,21 @@ namespace AetherArk.Content
             Add("ui.port_title", "항구 정박", "IN PORT");
             Add("ui.port_body", "천공문을 통과했습니다. 선단은 수리와 재보급을 마쳤고, 조선소가 기함 개장 모듈을 제안합니다.", "You are through the gate. The convoy is repaired and resupplied, and the yard offers flagship modules.");
             Add("ui.port_offers", "제안 모듈", "OFFERED MODULES");
+            Add("ui.port_weapons", "제안 무기", "OFFERED WEAPONS");
+            Add("ui.weapons_title", "무장 슬롯", "WEAPONS");
+            Add("ui.fire_all", "일제 사격", "Fire all");
+            Add("ui.unpowered_weapon", "전력 부족", "Unpowered");
+            Add("ui.no_ordnance", "군수품 없음", "No ordnance");
+            Add("ui.empty_hardpoint", "빈 하드포인트", "Empty hardpoint");
+            Add("ui.weapon_power", "전력 {0}", "Power {0}");
+            Add("ui.replaces", "교체: {0}", "Replaces {0}");
+            Add("command.weapon_unknown", "알 수 없는 무기입니다.", "Unknown weapon.");
+            Add("command.weapon_mounted", "이미 장착된 무기입니다.", "That weapon is already mounted.");
+            Add("command.weapon_bought", "무기를 장착했습니다.", "Weapon mounted.");
+            Add("command.weapon_unpowered", "무장실 전력이 부족합니다.", "Not enough weapons power.");
+            Add("command.no_ordnance", "군수품이 없습니다.", "No ordnance left.");
+            Add("command.invalid_slot", "잘못된 무기 슬롯입니다.", "Invalid weapon slot.");
+            Add("log.weapon_mounted", "{0} 장착 완료.", "{0} mounted.");
             Add("ui.port_installed", "설치된 모듈 ({0})", "INSTALLED MODULES ({0})");
             Add("ui.port_none", "설치된 모듈 없음", "No modules installed");
             Add("ui.buy", "구매", "Buy");

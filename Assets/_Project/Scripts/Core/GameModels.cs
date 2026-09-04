@@ -5,6 +5,7 @@ namespace AetherArk.Core
 {
     public enum GamePhase { MainMenu, RouteMap, Encounter, Combat, Victory, Defeat, Port }
     public enum ModuleCategory { Hull, Core, Weapons, Deck, Sensors, Engineering, Bridge, Marines }
+    public enum WeaponFamily { Cannon, Lance, Piercer, Missile, Flak, Incendiary, Breacher }
     public enum Difficulty { Story, Standard, Harsh }
     public enum Language { Korean, English }
     public enum AltitudeBand { Low, Medium, High }
@@ -103,6 +104,8 @@ namespace AetherArk.Core
         public string nameKey;
         public bool boardingCapable;
         public int moduleSlots = 4;
+        public int weaponHardpoints = 2;
+        public List<WeaponSlotState> weaponSlots = new List<WeaponSlotState>();
         public float hull;
         public float maxHull;
         public float armor;
@@ -236,6 +239,38 @@ namespace AetherArk.Core
     }
 
     [Serializable]
+    public sealed class WeaponSlotState
+    {
+        public string weaponId;
+        public float cooldown;
+    }
+
+    [Serializable]
+    public sealed class WeaponDefinition
+    {
+        public string id;
+        public string nameKey;
+        public string descriptionKey;
+        public WeaponFamily family;
+        public int tier = 1;
+        public int cost = 10;
+        public int powerCost = 1;
+        public float damage = 4f;
+        public float cooldown = 4f;
+        public float accuracyBonus;
+        /// <summary>Damage multiplier while the hit is being absorbed by a ward (lances 2, piercers 0.5).</summary>
+        public float wardMultiplier = 1f;
+        /// <summary>Fraction of the hit that bypasses armor and lands on hull and system.</summary>
+        public float armorPiercing;
+        public bool ignoresWard;
+        public int ordnancePerShot;
+        public float systemDamageMultiplier = 1f;
+        public float fireChance;
+        public float breachChance;
+        public int interceptCharge;
+    }
+
+    [Serializable]
     public sealed class ModuleDefinition
     {
         public string id;
@@ -338,6 +373,7 @@ namespace AetherArk.Core
         public string currentNodeId = "n0_1";
         public string activeEncounterId;
         public List<string> installedModules = new List<string>();
+        public List<WeaponSlotState> weaponSlots = new List<WeaponSlotState>();
         public StrategicResources resources = new StrategicResources();
         public ConvoyState convoy = new ConvoyState();
         public ShipState playerShip;

@@ -34,6 +34,7 @@ namespace AetherArk.Runtime
             var run = Read<RunState>(runPath);
             if (run == null) return null;
             run = MigrateRun(run);
+            GameSimulation.EnsureLoadout(run);
             if (run.phase == GamePhase.Victory || run.phase == GamePhase.Defeat) return null;
             return run;
         }

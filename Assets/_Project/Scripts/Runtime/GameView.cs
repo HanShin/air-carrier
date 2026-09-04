@@ -442,8 +442,6 @@ namespace AetherArk.Runtime
                 if (slotsFull) ui.Text("OfferFull_" + module.id, card, l10n.T("ui.slots_full"), 13, UiFactory.Danger, TextAnchor.MiddleRight, new Vector2(20f, 184f), new Vector2(440f, 26f), FontStyle.Bold);
             }
 
-            ui.Text("InstalledTitle", panel, l10n.T("ui.port_installed", state.installedModules.Count.ToString()), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
-                new Vector2(50f, 210f), new Vector2(800f, 36f), FontStyle.Bold);
             var list = new StringBuilder();
             for (var i = 0; i < state.installedModules.Count; i++)
             {
@@ -452,8 +450,42 @@ namespace AetherArk.Runtime
                 if (list.Length > 0) list.Append("     ");
                 list.Append("◆ ").Append(l10n.T(module.nameKey));
             }
-            ui.Text("InstalledList", panel, list.Length > 0 ? list.ToString() : l10n.T("ui.port_none"), 16, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
-                new Vector2(50f, 150f), new Vector2(1500f, 60f));
+            ui.Text("InstalledList", panel, l10n.T("ui.port_installed", state.installedModules.Count.ToString()) + ": " + (list.Length > 0 ? list.ToString() : l10n.T("ui.port_none")), 13,
+                UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(50f, 76f), new Vector2(1000f, 24f));
+
+            ui.Text("PortWeaponsTitle", panel, l10n.T("ui.port_weapons"), 16, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(50f, 250f), new Vector2(400f, 30f), FontStyle.Bold);
+            var weaponOffers = controller.Simulation.PortWeaponOffers();
+            for (var i = 0; i < weaponOffers.Count && i < 2; i++)
+            {
+                var weapon = ContentCatalog.GetWeapon(weaponOffers[i]);
+                if (weapon == null) continue;
+                var x = 50f + i * 500f;
+                var card = ui.PanelRect("WeaponOffer_" + weapon.id, panel, new Vector2(x, 128f), new Vector2(480f, 116f), UiFactory.PanelSoft);
+                card.GetComponent<Image>().raycastTarget = false;
+                ui.Text("WeaponOfferName_" + weapon.id, card, l10n.T(weapon.nameKey), 18, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                    new Vector2(18f, 80f), new Vector2(300f, 30f), FontStyle.Bold);
+                ui.Text("WeaponOfferMeta_" + weapon.id, card, $"{l10n.EnumName(weapon.family)}  ·  {l10n.T("ui.tier", weapon.tier.ToString())}  ·  {l10n.T("ui.weapon_power", weapon.powerCost.ToString())}  ·  {weapon.damage:0.0} / {weapon.cooldown:0.0}s", 12,
+                    UiFactory.TextMuted, TextAnchor.MiddleLeft, new Vector2(18f, 58f), new Vector2(440f, 22f));
+                ui.Text("WeaponOfferDesc_" + weapon.id, card, l10n.T(weapon.descriptionKey), 13, UiFactory.Aether, TextAnchor.UpperLeft,
+                    new Vector2(18f, 30f), new Vector2(440f, 28f));
+                var slots = state.weaponSlots;
+                var replaces = slots.Count >= state.playerShip.weaponHardpoints && slots.Count > 0 ? ContentCatalog.GetWeapon(slots[slots.Count - 1].weaponId) : null;
+                var label = $"{l10n.T("ui.buy")}  ·  {l10n.T("ui.salvage")} {weapon.cost}" + (replaces != null ? $"   ({l10n.T("ui.replaces", l10n.T(replaces.nameKey))})" : string.Empty);
+                var localId = weapon.id;
+                var buy = ui.Button("BuyWeapon_" + weapon.id, card, label, () => controller.PurchaseWeapon(localId),
+                    new Vector2(18f, 4f), new Vector2(444f, 24f), UiFactory.Brass, UiFactory.Ink, 12);
+                buy.interactable = state.resources.salvage >= weapon.cost;
+            }
+            var mounted = new StringBuilder();
+            for (var i = 0; i < state.weaponSlots.Count; i++)
+            {
+                var weapon = ContentCatalog.GetWeapon(state.weaponSlots[i].weaponId);
+                if (mounted.Length > 0) mounted.Append("  ·  ");
+                mounted.Append(weapon == null ? state.weaponSlots[i].weaponId : l10n.T(weapon.nameKey));
+            }
+            ui.Text("PortMounted", panel, $"{l10n.T("ui.weapons_title")}: {mounted}", 13, UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                new Vector2(50f, 100f), new Vector2(900f, 24f));
 
             var depart = ui.Button("DepartPort", panel, l10n.T("ui.port_depart"), ConfirmPort, new Vector2(1150f, 40f), new Vector2(400f, 70f), UiFactory.Brass, UiFactory.Ink, 20);
             depart.interactable = true;
@@ -637,20 +669,44 @@ namespace AetherArk.Runtime
             powerUp.interactable = system.type != ShipSystemType.AetherCore && system.power < system.maxPower && ship.AllocatedPower() < ship.coreOutput;
             var resonatorPresent = state.crew.Exists(crew => crew.role == CrewRole.Resonator && crew.IsActive && crew.currentRoom == system.type);
             var overcharge = ui.Button("Overcharge", panel, l10n.T("ui.overcharge"), () => controller.Overcharge(system.type),
-                new Vector2(18f, 380f), new Vector2(264f, 46f), UiFactory.Violet);
+                new Vector2(18f, 410f), new Vector2(264f, 28f), UiFactory.Violet, UiFactory.TextPrimary, 13);
             overcharge.interactable = system.maxPower > 0 && system.overchargeSeconds <= 0f && resonatorPresent;
 
-            var fire = ui.Button("Fire", panel, "[F] " + l10n.T("ui.fire") + $"\n{state.playerWeaponCooldown:0.0}s", () => controller.Fire(selectedEnemySystem),
-                new Vector2(18f, 310f), new Vector2(264f, 58f), new Color(0.48f, 0.18f, 0.12f, 0.98f));
             var weapons = ship.GetSystem(ShipSystemType.Weapons);
-            fire.interactable = state.playerWeaponCooldown <= 0f && weapons != null && weapons.EffectivePower > 0;
-            ui.Text("AltitudeLabel", panel, l10n.T("ui.altitude"), 18, UiFactory.Brass, TextAnchor.MiddleCenter,
-                new Vector2(18f, 267f), new Vector2(264f, 32f), FontStyle.Bold);
-            var low = ui.Button("Low", panel, l10n.T("ui.low"), () => controller.ChangeAltitude(AltitudeBand.Low), new Vector2(18f, 215f), new Vector2(82f, 44f),
+            var anyReady = false;
+            for (var slot = 0; slot < state.weaponSlots.Count && slot < 3; slot++)
+            {
+                var mount = state.weaponSlots[slot];
+                var weapon = ContentCatalog.GetWeapon(mount.weaponId);
+                var y = 344f - slot * 34f;
+                var powered = controller.Simulation.IsWeaponPowered(slot);
+                var hasOrdnance = weapon == null || weapon.ordnancePerShot <= state.resources.ordnance;
+                var ready = powered && mount.cooldown <= 0f && hasOrdnance && weapon != null;
+                anyReady |= ready;
+                var status = weapon == null ? l10n.T("ui.empty_hardpoint") : !powered ? l10n.T("ui.unpowered_weapon") : !hasOrdnance ? l10n.T("ui.no_ordnance")
+                    : mount.cooldown > 0f ? $"{mount.cooldown:0.0}s" : l10n.T("ui.fire");
+                var name = weapon == null ? l10n.T("ui.empty_hardpoint") : l10n.T(weapon.nameKey);
+                var localSlot = slot;
+                var button = ui.Button("Weapon_" + slot, panel, $"{name}  ·  {status}", () => controller.FireSlot(localSlot, selectedEnemySystem),
+                    new Vector2(18f, y), new Vector2(264f, 30f), ready ? new Color(0.48f, 0.18f, 0.12f, 0.98f) : powered ? UiFactory.PanelSoft : new Color(0.16f, 0.16f, 0.18f, 0.95f),
+                    ready ? UiFactory.TextPrimary : UiFactory.TextMuted, 12);
+                button.interactable = ready;
+                if (weapon != null)
+                {
+                    var progress = weapon.cooldown <= 0f ? 1f : 1f - Mathf.Clamp01(mount.cooldown / weapon.cooldown);
+                    ui.Bar("WeaponCooldown_" + slot, panel, progress, new Vector2(22f, y + 1f), new Vector2(256f, 3f), powered ? UiFactory.Brass : UiFactory.TextMuted);
+                }
+            }
+            var fire = ui.Button("Fire", panel, "[F] " + l10n.T("ui.fire_all"), () => controller.Fire(selectedEnemySystem),
+                new Vector2(18f, 380f), new Vector2(264f, 26f), new Color(0.48f, 0.18f, 0.12f, 0.98f), UiFactory.TextPrimary, 13);
+            fire.interactable = anyReady && weapons != null && weapons.EffectivePower > 0;
+            ui.Text("AltitudeLabel", panel, l10n.T("ui.altitude"), 16, UiFactory.Brass, TextAnchor.MiddleCenter,
+                new Vector2(18f, 250f), new Vector2(264f, 26f), FontStyle.Bold);
+            var low = ui.Button("Low", panel, l10n.T("ui.low"), () => controller.ChangeAltitude(AltitudeBand.Low), new Vector2(18f, 210f), new Vector2(82f, 38f),
                 state.playerShip.altitude == AltitudeBand.Low ? UiFactory.Aether : UiFactory.PanelSoft, state.playerShip.altitude == AltitudeBand.Low ? UiFactory.Ink : UiFactory.TextPrimary, 14);
-            var medium = ui.Button("Medium", panel, l10n.T("ui.medium"), () => controller.ChangeAltitude(AltitudeBand.Medium), new Vector2(109f, 215f), new Vector2(82f, 44f),
+            var medium = ui.Button("Medium", panel, l10n.T("ui.medium"), () => controller.ChangeAltitude(AltitudeBand.Medium), new Vector2(109f, 210f), new Vector2(82f, 38f),
                 state.playerShip.altitude == AltitudeBand.Medium ? UiFactory.Aether : UiFactory.PanelSoft, state.playerShip.altitude == AltitudeBand.Medium ? UiFactory.Ink : UiFactory.TextPrimary, 14);
-            var high = ui.Button("High", panel, l10n.T("ui.high"), () => controller.ChangeAltitude(AltitudeBand.High), new Vector2(200f, 215f), new Vector2(82f, 44f),
+            var high = ui.Button("High", panel, l10n.T("ui.high"), () => controller.ChangeAltitude(AltitudeBand.High), new Vector2(200f, 210f), new Vector2(82f, 38f),
                 state.playerShip.altitude == AltitudeBand.High ? UiFactory.Aether : UiFactory.PanelSoft, state.playerShip.altitude == AltitudeBand.High ? UiFactory.Ink : UiFactory.TextPrimary, 14);
             var lift = ship.GetSystem(ShipSystemType.LiftArray);
             var canChangeAltitude = state.altitudeCooldown <= 0f && lift != null && lift.EffectivePower > 0;
@@ -661,7 +717,7 @@ namespace AetherArk.Runtime
             var supportText = l10n.T("ui.support_call");
             if (state.convoy.supportCooldown > 0) supportText += "\n" + l10n.T("ui.cooldown", state.convoy.supportCooldown.ToString());
             var support = ui.Button("Support", panel, supportText, controller.UseSupport,
-                new Vector2(18f, 142f), new Vector2(264f, 58f), new Color(0.18f, 0.28f, 0.46f, 0.98f), UiFactory.TextPrimary, 15);
+                new Vector2(18f, 150f), new Vector2(264f, 52f), new Color(0.18f, 0.28f, 0.46f, 0.98f), UiFactory.TextPrimary, 14);
             support.interactable = state.convoy.supportCooldown <= 0;
             if (state.resources.ordnance <= 0)
             {

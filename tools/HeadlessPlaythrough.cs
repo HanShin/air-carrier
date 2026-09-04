@@ -297,6 +297,24 @@ internal static class HeadlessPlaythrough
             }
             if (pick != null && simulation.PurchaseModule(pick).success) bought = true;
         }
+        // Then the best affordable weapon if a hardpoint is free (or clearly better than the last one).
+        var weaponOffers = simulation.PortWeaponOffers();
+        string bestWeapon = null;
+        var bestScore = 0f;
+        foreach (var offer in weaponOffers)
+        {
+            var weapon = ContentCatalog.GetWeapon(offer);
+            if (weapon == null || simulation.State.resources.salvage < weapon.cost || weapon.ordnancePerShot > 0) continue;
+            var score = weapon.damage / weapon.cooldown;
+            if (score > bestScore) { bestScore = score; bestWeapon = offer; }
+        }
+        if (bestWeapon != null)
+        {
+            var slots = simulation.State.weaponSlots;
+            var last = slots.Count > 0 ? ContentCatalog.GetWeapon(slots[slots.Count - 1].weaponId) : null;
+            var lastScore = last == null ? 0f : last.damage / last.cooldown;
+            if (slots.Count < simulation.State.playerShip.weaponHardpoints || bestScore > lastScore * 1.2f) simulation.PurchaseWeapon(bestWeapon);
+        }
         simulation.DepartPort();
     }
 
@@ -379,11 +397,16 @@ internal static class HeadlessPlaythrough
         var launchedInterceptor = false;
         var resonator = simulation.State.crew.Find(crew => crew.role == CrewRole.Resonator);
         if (resonator != null) simulation.MoveCrew(resonator.id, ShipSystemType.Weapons);
+        // Route spare core output into the weapons room so every mounted weapon can be powered.
+        var ship = simulation.State.playerShip;
+        var weaponsSystem = ship.GetSystem(ShipSystemType.Weapons);
+        while (weaponsSystem != null && weaponsSystem.power < weaponsSystem.maxPower && ship.AllocatedPower() < ship.coreOutput
+               && !simulation.IsWeaponPowered(simulation.State.weaponSlots.Count - 1))
+            simulation.ChangePower(ShipSystemType.Weapons, 1);
 
         while (simulation.State.phase == GamePhase.Combat && elapsed < 420f)
         {
-            if (simulation.State.playerWeaponCooldown <= 0f)
-                simulation.FireMainWeapon(ShipSystemType.Weapons);
+            simulation.FireAllReady(ShipSystemType.Weapons);
 
             var cautious = strategy == "cautious";
             var bomber = simulation.State.squadrons.Find(squadron => squadron.type == SquadronType.Bomber);
