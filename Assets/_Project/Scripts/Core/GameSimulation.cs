@@ -379,7 +379,7 @@ namespace AetherArk.Core
         public void BeginCombat(int tier, bool finalBattle)
         {
             var combatState = State.random.combat;
-            State.enemyShip = ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, ref combatState);
+            State.enemyShip = ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, State.regionIndex, ref combatState);
             var scale = ContentCatalog.GetRegion(State.regionIndex).enemyStatMultiplier;
             if (scale > 1f)
             {

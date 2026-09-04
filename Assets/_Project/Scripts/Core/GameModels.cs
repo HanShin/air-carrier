@@ -108,6 +108,8 @@ namespace AetherArk.Core
         public int moduleSlots = 4;
         public int wingBays = 2;
         public int weaponHardpoints = 2;
+        /// <summary>Deck plan to draw; configs of one silhouette share it. Empty means the ship id.</summary>
+        public string deckPlanId;
         public List<WeaponSlotState> weaponSlots = new List<WeaponSlotState>();
         public float hull;
         public float maxHull;
@@ -240,6 +242,24 @@ namespace AetherArk.Core
         public string bodyKey;
         public EncounterType type;
         public List<EncounterChoiceDefinition> choices = new List<EncounterChoiceDefinition>();
+    }
+
+    [Serializable]
+    public sealed class EnemyDefinition
+    {
+        public string id;
+        public string silhouette;
+        public string nameKey;
+        public string displayName;
+        public int tier = 1;
+        public int weight = 10;
+        public int minRegion = 1;
+        public float hull, armor, ward;
+        public int coreOutput;
+        public bool boarding;
+        public string[] weapons;
+        public int[] power;
+        public int[] maxPower;
     }
 
     [Serializable]

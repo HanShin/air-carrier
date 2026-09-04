@@ -49,6 +49,7 @@ namespace AetherArk.Content
             AddModuleStrings();
             AddWeaponStrings();
             AddWingStrings();
+            AddEnemyStrings();
             Add("game.title", "에테르 아크", "AETHER ARK");
             Add("game.subtitle", "천공 피난선단 지휘 프로토타입", "Sky Convoy Command Prototype");
             Add("menu.new_run", "새 원정", "New Expedition");

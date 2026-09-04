@@ -73,60 +73,20 @@ namespace AetherArk.Content
             return CreateFlagship("ship_vanguard");
         }
 
-        private sealed class EnemyDefinition
+        private static readonly List<EnemyDefinition> EnemyRoster = BuildEnemyRoster();
+
+        private static List<EnemyDefinition> BuildEnemyRoster()
         {
-            public string id;
-            public string displayName;
-            public int tier;
-            public int weight;
-            public float hull, armor, ward;
-            public int coreOutput;
-            public bool boarding;
-            public string[] weapons;
-            // Power per system in enum order: Bridge, AetherCore, LiftArray, Engines, Ward, Weapons, FlightDeck, Sensors, Infirmary, LifeSupport.
-            public int[] power;
-            public int[] maxPower;
+            var result = new List<EnemyDefinition>();
+            EnemyLibrary.AddAll(result);
+            return result;
         }
 
-        private static readonly EnemyDefinition[] EnemyRoster =
+        public static EnemyDefinition GetEnemyDefinition(string id)
         {
-            new EnemyDefinition
-            {
-                id = "enemy_cutter", weapons = new[] { "aether_cannon" }, displayName = "Imperial Pursuit Cutter", tier = 1, weight = 40,
-                hull = 24f, armor = 10f, ward = 8f, coreOutput = 9,
-                power = new[] { 1, 0, 1, 2, 1, 3, 0, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
-            },
-            new EnemyDefinition
-            {
-                id = "enemy_carrier", weapons = new[] { "flak_battery" }, displayName = "Imperial Strike Carrier", tier = 1, weight = 20,
-                hull = 28f, armor = 12f, ward = 10f, coreOutput = 10,
-                power = new[] { 1, 0, 1, 1, 1, 1, 3, 1, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 3, 4, 2, 1, 2 }
-            },
-            new EnemyDefinition
-            {
-                id = "enemy_scout", weapons = new[] { "bolt_thrower" }, displayName = "Imperial Scout Frigate", tier = 1, weight = 20,
-                hull = 20f, armor = 8f, ward = 8f, coreOutput = 11,
-                power = new[] { 1, 0, 1, 3, 1, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 4, 3, 3, 1, 3, 1, 2 }
-            },
-            new EnemyDefinition
-            {
-                id = "enemy_boarder", weapons = new[] { "ember_mortar" }, displayName = "Imperial Boarding Barge", tier = 1, weight = 20, boarding = true,
-                hull = 26f, armor = 12f, ward = 6f, coreOutput = 9,
-                power = new[] { 1, 0, 1, 1, 1, 1, 2, 0, 1, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 3, 3, 2, 1, 2 }
-            },
-            new EnemyDefinition
-            {
-                id = "enemy_cruiser", weapons = new[] { "heavy_cannon" }, displayName = "Imperial Storm Cruiser", tier = 2, weight = 60,
-                hull = 34f, armor = 18f, ward = 12f, coreOutput = 11,
-                power = new[] { 1, 0, 1, 2, 2, 3, 1, 0, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 3, 4, 2, 2, 1, 2 }
-            },
-            new EnemyDefinition
-            {
-                id = "enemy_monitor", weapons = new[] { "aether_cannon" }, displayName = "Imperial Bulwark Monitor", tier = 2, weight = 40,
-                hull = 30f, armor = 22f, ward = 16f, coreOutput = 11,
-                power = new[] { 1, 0, 1, 1, 3, 2, 0, 2, 0, 1 }, maxPower = new[] { 2, 0, 3, 3, 4, 4, 1, 3, 1, 2 }
-            }
-        };
+            for (var i = 0; i < EnemyRoster.Count; i++) if (EnemyRoster[i].id == id) return EnemyRoster[i];
+            return null;
+        }
 
         private static readonly ShipSystemType[] SystemOrder =
         {
@@ -144,20 +104,33 @@ namespace AetherArk.Content
         /// Picks an enemy for the battle tier. Without variants only the baseline cutter/cruiser can appear,
         /// which keeps the locked first expedition byte-for-byte reproducible.
         /// </summary>
+        /// <summary>Legacy overload: region 1.</summary>
         public static ShipState CreateEnemy(int tier, bool allowVariants, ref uint random)
         {
+            return CreateEnemy(tier, allowVariants, 1, ref random);
+        }
+
+        /// <summary>
+        /// Picks an enemy config for the battle tier. Without variants only the baseline cutter/cruiser can appear,
+        /// which keeps the locked first expedition reproducible; with variants the weighted pool is every config
+        /// of the tier whose minimum region has been reached.
+        /// </summary>
+        public static ShipState CreateEnemy(int tier, bool allowVariants, int regionIndex, ref uint random)
+        {
             var effectiveTier = tier >= 2 ? 2 : 1;
-            var chosen = effectiveTier == 2 ? EnemyRoster[4] : EnemyRoster[0];
+            var chosen = GetEnemyDefinition(effectiveTier == 2 ? "enemy_cruiser" : "enemy_cutter");
             if (allowVariants)
             {
                 var total = 0;
-                for (var i = 0; i < EnemyRoster.Length; i++) if (EnemyRoster[i].tier == effectiveTier) total += EnemyRoster[i].weight;
-                var roll = SeededRandom.Range(ref random, 0, total);
-                for (var i = 0; i < EnemyRoster.Length; i++)
+                for (var i = 0; i < EnemyRoster.Count; i++)
+                    if (EnemyRoster[i].tier == effectiveTier && EnemyRoster[i].minRegion <= regionIndex) total += EnemyRoster[i].weight;
+                var roll = SeededRandom.Range(ref random, 0, Math.Max(1, total));
+                for (var i = 0; i < EnemyRoster.Count; i++)
                 {
-                    if (EnemyRoster[i].tier != effectiveTier) continue;
-                    if (roll < EnemyRoster[i].weight) { chosen = EnemyRoster[i]; break; }
-                    roll -= EnemyRoster[i].weight;
+                    var candidate = EnemyRoster[i];
+                    if (candidate.tier != effectiveTier || candidate.minRegion > regionIndex) continue;
+                    if (roll < candidate.weight) { chosen = candidate; break; }
+                    roll -= candidate.weight;
                 }
             }
             return Build(chosen, ref random);
@@ -165,14 +138,20 @@ namespace AetherArk.Content
 
         public static ShipState CreateEnemyById(string id, ref uint random)
         {
-            for (var i = 0; i < EnemyRoster.Length; i++)
-                if (EnemyRoster[i].id == id) return Build(EnemyRoster[i], ref random);
-            return null;
+            var definition = GetEnemyDefinition(id);
+            return definition == null ? null : Build(definition, ref random);
         }
 
         public static IEnumerable<string> EnemyIds()
         {
-            for (var i = 0; i < EnemyRoster.Length; i++) yield return EnemyRoster[i].id;
+            for (var i = 0; i < EnemyRoster.Count; i++) yield return EnemyRoster[i].id;
+        }
+
+        /// <summary>Deck plan for any ship: configs draw their silhouette's plan.</summary>
+        public static DeckPlan DeckPlanFor(ShipState ship)
+        {
+            if (ship == null) return null;
+            return GetDeckPlan(string.IsNullOrEmpty(ship.deckPlanId) ? ship.id : ship.deckPlanId) ?? GetDeckPlan(ship.id);
         }
 
         private static ShipState Build(EnemyDefinition definition, ref uint random)
@@ -180,8 +159,9 @@ namespace AetherArk.Content
             var ship = new ShipState
             {
                 id = definition.id,
+                deckPlanId = definition.silhouette,
                 displayName = definition.displayName,
-                nameKey = "ship." + definition.id,
+                nameKey = string.IsNullOrEmpty(definition.nameKey) ? "ship." + definition.id : definition.nameKey,
                 hull = definition.hull,
                 maxHull = definition.hull,
                 armor = definition.armor,
@@ -418,6 +398,48 @@ namespace AetherArk.Content
                 Tile(ShipSystemType.Sensors, 5, 0, 1, 2),
                 Tile(ShipSystemType.Weapons, 5, 2),
                 Tile(ShipSystemType.Bridge, 6, 0, 1, 2));
+
+            plans["enemy_lancer"] = Plan("enemy_lancer", 5, 2,
+                Tile(ShipSystemType.Engines, 0, 0), Tile(ShipSystemType.LifeSupport, 0, 1),
+                Tile(ShipSystemType.AetherCore, 1, 0), Tile(ShipSystemType.LiftArray, 1, 1),
+                Tile(ShipSystemType.Weapons, 2, 0, 2, 1), Tile(ShipSystemType.Ward, 2, 1), Tile(ShipSystemType.FlightDeck, 3, 1),
+                Tile(ShipSystemType.Bridge, 4, 0), Tile(ShipSystemType.Sensors, 4, 1), Tile(ShipSystemType.Infirmary, 5, 0, 1, 2));
+            plans["enemy_lancer"].columns = 6;
+
+            plans["enemy_minelayer"] = Plan("enemy_minelayer", 6, 2,
+                Tile(ShipSystemType.Engines, 0, 0), Tile(ShipSystemType.LifeSupport, 0, 1),
+                Tile(ShipSystemType.AetherCore, 1, 0), Tile(ShipSystemType.LiftArray, 1, 1),
+                Tile(ShipSystemType.Weapons, 2, 0, 2, 2),
+                Tile(ShipSystemType.Infirmary, 4, 0), Tile(ShipSystemType.Ward, 4, 1),
+                Tile(ShipSystemType.Bridge, 5, 0), Tile(ShipSystemType.Sensors, 5, 1), Tile(ShipSystemType.FlightDeck, 6, 0, 1, 2));
+            plans["enemy_minelayer"].columns = 7;
+
+            plans["enemy_firebrand"] = Plan("enemy_firebrand", 5, 2,
+                Tile(ShipSystemType.Engines, 0, 0), Tile(ShipSystemType.LifeSupport, 0, 1),
+                Tile(ShipSystemType.LiftArray, 1, 0), Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.Weapons, 2, 0, 1, 2), Tile(ShipSystemType.Ward, 3, 0), Tile(ShipSystemType.Infirmary, 3, 1),
+                Tile(ShipSystemType.Bridge, 4, 0), Tile(ShipSystemType.Sensors, 4, 1), Tile(ShipSystemType.FlightDeck, 5, 0, 1, 2));
+            plans["enemy_firebrand"].columns = 6;
+
+            plans["enemy_dreadnought"] = Plan("enemy_dreadnought", 6, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 3),
+                Tile(ShipSystemType.LiftArray, 1, 0), Tile(ShipSystemType.AetherCore, 1, 1), Tile(ShipSystemType.LifeSupport, 1, 2),
+                Tile(ShipSystemType.Weapons, 2, 0, 2, 2), Tile(ShipSystemType.Ward, 2, 2, 2, 1),
+                Tile(ShipSystemType.FlightDeck, 4, 0), Tile(ShipSystemType.Sensors, 4, 1), Tile(ShipSystemType.Infirmary, 4, 2),
+                Tile(ShipSystemType.Bridge, 5, 0, 1, 3));
+
+            plans["enemy_hive"] = Plan("enemy_hive", 7, 3,
+                Tile(ShipSystemType.Engines, 0, 0, 1, 2), Tile(ShipSystemType.LifeSupport, 0, 2),
+                Tile(ShipSystemType.LiftArray, 1, 0), Tile(ShipSystemType.AetherCore, 1, 1), Tile(ShipSystemType.Infirmary, 1, 2),
+                Tile(ShipSystemType.FlightDeck, 2, 0, 3, 3),
+                Tile(ShipSystemType.Sensors, 5, 0), Tile(ShipSystemType.Weapons, 5, 1), Tile(ShipSystemType.Ward, 5, 2),
+                Tile(ShipSystemType.Bridge, 6, 0, 1, 2));
+
+            plans["enemy_wraith"] = Plan("enemy_wraith", 6, 2,
+                Tile(ShipSystemType.Engines, 0, 0, 2, 1), Tile(ShipSystemType.LifeSupport, 0, 1), Tile(ShipSystemType.AetherCore, 1, 1),
+                Tile(ShipSystemType.LiftArray, 2, 0), Tile(ShipSystemType.Ward, 2, 1),
+                Tile(ShipSystemType.Sensors, 3, 0, 2, 1), Tile(ShipSystemType.Weapons, 3, 1), Tile(ShipSystemType.Infirmary, 4, 1),
+                Tile(ShipSystemType.Bridge, 5, 0), Tile(ShipSystemType.FlightDeck, 5, 1));
 
             plans["enemy_cutter"] = Plan("enemy_cutter", 5, 2,
                 Tile(ShipSystemType.Engines, 0, 0),

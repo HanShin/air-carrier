@@ -656,7 +656,7 @@ namespace AetherArk.Runtime
                 new Vector2(18f, 8f), new Vector2(664f, 20f));
             AddRoomDetail(panel, "PlayerRoomDetail", ship, ship.GetSystem(selectedPlayerSystem), state.crew, true, new Vector2(16f, 30f), new Vector2(668f, 64f));
 
-            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 98f), new Vector2(668f, 450f), new BlueprintOptions
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.DeckPlanFor(ship), new Vector2(16f, 98f), new Vector2(668f, 450f), new BlueprintOptions
             {
                 roomNamePrefix = "Room_",
                 selectedSystem = selectedPlayerSystem,
@@ -788,7 +788,7 @@ namespace AetherArk.Runtime
                 new Vector2(18f, 8f), new Vector2(608f, 20f), FontStyle.Bold);
             AddRoomDetail(panel, "EnemyRoomDetail", ship, target, null, false, new Vector2(16f, 30f), new Vector2(612f, 64f));
 
-            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.GetDeckPlan(ship.id), new Vector2(16f, 98f), new Vector2(612f, 446f), new BlueprintOptions
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.DeckPlanFor(ship), new Vector2(16f, 98f), new Vector2(612f, 446f), new BlueprintOptions
             {
                 roomNamePrefix = "EnemySystem_",
                 selectedSystem = selectedEnemySystem,

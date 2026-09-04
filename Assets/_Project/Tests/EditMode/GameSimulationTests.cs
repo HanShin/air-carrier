@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using AetherArk.Content;
@@ -1763,6 +1764,61 @@ namespace AetherArk.Tests
             Assert.That(state.squadrons[replacedIndex].strength, Is.EqualTo(wing.strength));
             Assert.That(state.resources.salvage, Is.EqualTo(salvageBefore - wing.cost + replaced.cost / 2));
             Assert.That(simulation.PurchaseWing(offer[0]).success, Is.False, "already carried");
+        }
+
+        [Test]
+        public void EnemyLibrary_HasTwelveSilhouettesAndThirtyValidConfigs()
+        {
+            var ids = new List<string>(ContentCatalog.EnemyIds());
+            Assert.That(ids.Count, Is.GreaterThanOrEqualTo(30));
+            var silhouettes = new System.Collections.Generic.HashSet<string>();
+            var ko = new LocalizationService(Language.Korean);
+            var en = new LocalizationService(Language.English);
+            foreach (var id in ids)
+            {
+                var definition = ContentCatalog.GetEnemyDefinition(id);
+                Assert.That(definition, Is.Not.Null, id);
+                silhouettes.Add(definition.silhouette);
+                Assert.That(definition.weight, Is.GreaterThan(0), id);
+                Assert.That(definition.minRegion, Is.InRange(1, ContentCatalog.RegionCount), id);
+                Assert.That(definition.tier, Is.InRange(1, 2), id);
+                Assert.That(ko.T(definition.nameKey), Is.Not.EqualTo(definition.nameKey), id);
+                Assert.That(en.T(definition.nameKey), Is.Not.EqualTo(definition.nameKey), id);
+                foreach (var weapon in definition.weapons) Assert.That(ContentCatalog.GetWeapon(weapon), Is.Not.Null, id + " weapon " + weapon);
+                var random = 5u;
+                var ship = ContentCatalog.CreateEnemyById(id, ref random);
+                Assert.That(ship.systems.Count, Is.EqualTo(10), id);
+                Assert.That(ship.AllocatedPower(), Is.LessThanOrEqualTo(ship.coreOutput), id + " over-allocates power");
+                Assert.That(ContentCatalog.DeckPlanFor(ship), Is.Not.Null, id + " has no deck plan through its silhouette");
+                Assert.That(ship.nameKey, Is.EqualTo(definition.nameKey));
+            }
+            Assert.That(silhouettes.Count, Is.GreaterThanOrEqualTo(12));
+        }
+
+        [Test]
+        public void EnemySelection_RespectsRegionGatesAndKeepsTheTutorialBaseline()
+        {
+            var lateOnly = new List<string>();
+            foreach (var id in ContentCatalog.EnemyIds())
+                if (ContentCatalog.GetEnemyDefinition(id).minRegion >= 3) lateOnly.Add(id);
+            Assert.That(lateOnly.Count, Is.GreaterThan(0));
+
+            var seenLateInRegionOne = false;
+            var seenLateInRegionFour = false;
+            for (var seed = 1u; seed < 400u; seed++)
+            {
+                var r1 = seed; var r4 = seed;
+                var early = ContentCatalog.CreateEnemy(1, true, 1, ref r1);
+                var late = ContentCatalog.CreateEnemy(1, true, 4, ref r4);
+                if (lateOnly.Contains(early.id)) seenLateInRegionOne = true;
+                if (lateOnly.Contains(late.id)) seenLateInRegionFour = true;
+            }
+            Assert.That(seenLateInRegionOne, Is.False, "region-gated configs must not appear in region 1");
+            Assert.That(seenLateInRegionFour, Is.True, "region-gated configs should appear by region 4");
+
+            var random = 9u;
+            Assert.That(ContentCatalog.CreateEnemy(1, false, 4, ref random).id, Is.EqualTo("enemy_cutter"));
+            Assert.That(ContentCatalog.CreateEnemy(2, false, 4, ref random).id, Is.EqualTo("enemy_cruiser"));
         }
 
         [TestCase(WeatherType.Thunderhead, -0.08f)]
