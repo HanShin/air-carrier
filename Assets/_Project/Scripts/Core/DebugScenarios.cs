@@ -42,6 +42,7 @@ namespace AetherArk.Core
             {
                 downed.health = 0f;
                 downed.downedSeconds = 20f;
+                CrewMovementRules.Stop(downed);
             }
 
             var enemy = state.enemyShip;

@@ -113,7 +113,8 @@ namespace AetherArk.Runtime
             }
             catch (ArgumentException) { throw new InvalidDataException("repro.invalid_snapshot"); }
             Validate(payload);
-            differentBuild = snapshot.simulationBuild != SimulationBuild || snapshot.unityVersion != Application.unityVersion;
+            differentBuild = snapshot.simulationBuild != SimulationBuild || snapshot.unityVersion != Application.unityVersion || payload.run.schemaVersion < CrewMovementRules.RunVersion;
+            CrewMovementRules.Ensure(payload.run);
             return payload; // Exact captured pause/RNG/timers; the UI pauses its own loaded copy for safe inspection.
         }
 
@@ -144,7 +145,7 @@ namespace AetherArk.Runtime
         {
             var run = payload?.run; var profile = payload?.profile;
             if (run == null || profile == null) throw new InvalidDataException("repro.invalid_snapshot");
-            if (run.schemaVersion != 1 || profile.schemaVersion != 2) throw new InvalidDataException("repro.unsupported_version");
+            if ((run.schemaVersion != 1 && run.schemaVersion != CrewMovementRules.RunVersion) || profile.schemaVersion != 2) throw new InvalidDataException("repro.unsupported_version");
             if (run.phase != GamePhase.Combat) throw new InvalidDataException("repro.combat_only");
             if (run.resources == null || run.convoy == null || run.random == null || run.crew == null || run.squadrons == null ||
                 run.routeNodes == null || run.weaponSlots == null || run.installedModules == null || run.combatLog == null ||
@@ -161,6 +162,8 @@ namespace AetherArk.Runtime
             foreach (var crew in run.crew)
             {
                 if (crew == null || string.IsNullOrEmpty(crew.id) || !ids.Add(crew.id)) throw new InvalidDataException("repro.invalid_snapshot");
+                if (!CrewMovementRules.IsValid(crew, ContentCatalog.DeckPlanFor(run.playerShip), run.schemaVersion >= 2))
+                    throw new InvalidDataException("repro.invalid_snapshot");
                 captain |= crew.isCaptain;
             }
             if (!captain) throw new InvalidDataException("repro.invalid_snapshot");

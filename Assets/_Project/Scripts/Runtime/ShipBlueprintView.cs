@@ -21,6 +21,7 @@ namespace AetherArk.Runtime
         public bool showAllocatedPower = true;
         public bool exteriorOnly;
         public bool enlargeDeck;
+        public RunState run;
     }
 
     /// <summary>
@@ -112,6 +113,8 @@ namespace AetherArk.Runtime
                 var h = tile.height * cellHeight - gap;
                 DrawRoom(ui, l10n, container, ship, system, room, new Vector2(x, y), new Vector2(w, h), options);
             }
+            if (options.crew != null)
+                DrawCrew(ui, container, ship, plan, new Vector2(gridX, gridY), new Vector2(cellWidth, cellHeight), size, options);
         }
 
         private static void DrawHull(UiFactory ui, RectTransform container, string deckPlanId, Vector2 canvasSize, float gridX, float gridY,
@@ -239,7 +242,6 @@ namespace AetherArk.Runtime
             ui.Bar("Integrity_" + system.type, container, system.Integrity, new Vector2(position.x + 5f, position.y + 4f), new Vector2(size.x - 10f, 5f),
                 system.Integrity < 0.35f ? UiFactory.Danger : UiFactory.Success);
 
-            if (options.crew != null) DrawCrewTokens(ui, container, system.type, position, size, options);
         }
 
         public static string PowerPips(ShipSystemState system, bool showAllocated)
@@ -251,33 +253,28 @@ namespace AetherArk.Runtime
             return builder.ToString();
         }
 
-        private static void DrawCrewTokens(UiFactory ui, RectTransform container, ShipSystemType roomType, Vector2 position, Vector2 size, BlueprintOptions options)
+        private static void DrawCrew(UiFactory ui, RectTransform container, ShipState ship, DeckPlan plan, Vector2 origin, Vector2 cells, Vector2 size, BlueprintOptions options)
         {
-            var token = Mathf.Clamp(Mathf.Min(size.x, size.y) * 0.28f, 16f, 28f);
-            var index = 0;
+            var routes = ui.Rect("CrewRoutes", container, Vector2.zero, size).gameObject.AddComponent<CrewRouteGraphic>();
+            routes.plan = plan; routes.crew = options.crew; routes.selectedCrewId = options.selectedCrewId;
+            routes.run = options.run;
+            routes.gridOrigin = origin; routes.cellSize = cells; routes.raycastTarget = false;
+            var token = Mathf.Clamp(Mathf.Min(cells.x, cells.y) * 0.46f, 18f, 34f);
             for (var i = 0; i < options.crew.Count; i++)
             {
                 var crew = options.crew[i];
-                if (crew.currentRoom != roomType || crew.isDead || crew.onSortie) continue;
-                var x = position.x + 6f + index * (token + 4f);
-                if (x + token > position.x + size.x - 4f) break;
-                var y = position.y + 7f;
-                var selected = options.selectedCrewId == crew.id;
-                var ringColor = selected ? Color.white : crew.isCaptain ? UiFactory.Brass : new Color(0f, 0f, 0f, 0.55f);
-                ui.Circle("CrewRing_" + crew.id, container, new Vector2(x - 2f, y - 2f), new Vector2(token + 4f, token + 4f), ringColor).raycastTarget = false;
-                var color = LineageColor(crew.lineage);
-                if (crew.IsDowned) color = new Color(0.55f, 0.18f, 0.2f, 1f);
-                var rect = ui.Rect("CrewToken_" + crew.id, container, new Vector2(x, y), new Vector2(token, token));
-                var image = ui.Image(rect, color);
-                image.sprite = UiFactory.CircleSprite;
+                if (crew.isDead || crew.onSortie) continue;
+                var rect = ui.Rect("CrewToken_" + crew.id, container, Vector2.zero, new Vector2(token, token));
+                var figure = rect.gameObject.AddComponent<CrewFigureGraphic>();
+                figure.crew = crew; figure.ship = ship; figure.run = options.run;
+                figure.gridOrigin = origin; figure.cellSize = cells; figure.rows = plan.rows;
+                figure.selected = options.selectedCrewId == crew.id; figure.reducedMotion = options.reducedMotion;
+                figure.highContrast = options.highContrast; figure.RefreshPose();
                 var button = rect.gameObject.AddComponent<Button>();
-                button.targetGraphic = image;
+                button.targetGraphic = figure;
                 var localId = crew.id;
                 if (options.onCrewClick != null) button.onClick.AddListener(() => options.onCrewClick(localId));
                 button.interactable = !crew.IsDowned;
-                ui.Text("CrewInitial_" + crew.id, rect, crew.IsDowned ? "!" : BlueprintRules.CrewInitial(crew.displayName), Mathf.RoundToInt(token * 0.5f), UiFactory.Ink,
-                    TextAnchor.MiddleCenter, Vector2.zero, new Vector2(token, token), FontStyle.Bold);
-                index++;
             }
         }
 

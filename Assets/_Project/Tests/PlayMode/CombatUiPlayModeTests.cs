@@ -79,7 +79,8 @@ namespace AetherArk.Tests
             yield return null;
             ActivateButton("Room_" + destination);
             yield return null;
-            Assert.That(crew.currentRoom, Is.EqualTo(destination), "Crew selection followed by a room click did not issue a move command.");
+            Assert.That(crew.IsMoving, Is.True, "Room click must queue a walk while paused, not teleport.");
+            Assert.That(crew.movement.destination, Is.EqualTo(destination));
 
             controller.AbandonRun();
         }

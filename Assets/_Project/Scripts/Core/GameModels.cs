@@ -182,9 +182,12 @@ namespace AetherArk.Core
         public bool onSortie;
         public int skillLevel = 1;
         public int experience;
+        public CrewMovementState movement;
 
         public bool IsActive => !isDead && health > 0f && !onSortie;
         public bool IsDowned => !isDead && health <= 0f;
+        public bool IsMoving => movement != null && movement.path != null && movement.path.Count > 0;
+        public bool IsAtStation => IsActive && !IsMoving;
     }
 
     [Serializable]
@@ -452,7 +455,7 @@ namespace AetherArk.Core
     [Serializable]
     public sealed class RunState
     {
-        public int schemaVersion = 1;
+        public int schemaVersion = CrewMovementRules.RunVersion;
         public int seed;
         public bool isFirstExpedition;
         public GamePhase phase = GamePhase.RouteMap;

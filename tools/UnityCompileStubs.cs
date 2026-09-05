@@ -273,6 +273,7 @@ namespace UnityEngine.UI
     {
         public UnityEngine.Color color { get; set; }
         public bool raycastTarget { get; set; }
+        public void SetVerticesDirty() { }
         public UnityEngine.RectTransform rectTransform => new UnityEngine.RectTransform();
     }
 

@@ -15,6 +15,7 @@ namespace AetherArk.Core
         public GameSimulation(RunState state)
         {
             State = state ?? throw new ArgumentNullException(nameof(state));
+            CrewMovementRules.Ensure(State);
         }
 
         public static GameSimulation NewRun(ProfileState profile, int seed)
@@ -421,6 +422,7 @@ namespace AetherArk.Core
 
         public void BeginCombat(int tier, bool finalBattle)
         {
+            CrewMovementRules.Ensure(State);
             var combatState = State.random.combat;
             State.enemyShip = finalBattle && State.regionCount > 1 && State.regionIndex >= State.regionCount
                 ? ContentCatalog.CreateEnemyById("enemy_gate_warden", ref combatState) ?? ContentCatalog.CreateEnemy(tier, !State.isFirstExpedition, State.regionIndex, ref combatState)
@@ -512,6 +514,8 @@ namespace AetherArk.Core
 
             if (State.enemyShip != null && State.enemyShip.IsDestroyed) ResolveVictory();
             CheckDefeat();
+            // Enemy fire / weather can down a walker after TickCrew, including on an auto-paused frame.
+            foreach (var crew in State.crew) if (!crew.IsActive) CrewMovementRules.Stop(crew);
         }
 
         private static void TickShipSystems(ShipState ship, float dt)
@@ -578,7 +582,7 @@ namespace AetherArk.Core
             for (var i = 0; i < State.crew.Count; i++)
             {
                 var crew = State.crew[i];
-                if (!crew.IsActive || crew.currentRoom != room.system) continue;
+                if (!crew.IsAtStation || crew.currentRoom != room.system) continue;
                 defenderPower += LineageRules.Get(crew.lineage).boardingMultiplier * TraitRules.Modifiers(crew).boardingMultiplier
                     * CrewProgressionRules.SkillMultiplier(crew, 0.12f);
                 if (crew.role == CrewRole.Marine) marinePresent = true;
@@ -609,6 +613,7 @@ namespace AetherArk.Core
             for (var i = 0; i < State.crew.Count; i++)
             {
                 var crew = State.crew[i];
+                CrewMovementRules.Tick(crew, dt);
                 if (crew.isDead || crew.onSortie) continue;
                 if (crew.health <= 0f)
                 {
@@ -628,9 +633,12 @@ namespace AetherArk.Core
 
                 var crewModifiers = ModuleRules.Modifiers(State);
                 var repairRate = CrewRepairRate(crew) * crewModifiers.repairRate;
-                system.damage = Math.Max(0f, system.damage - repairRate * dt);
-                room.fire = Math.Max(0f, room.fire - repairRate * 0.8f * dt);
-                room.breach = Math.Max(0f, room.breach - repairRate * 0.55f * dt);
+                if (!crew.IsMoving)
+                {
+                    system.damage = Math.Max(0f, system.damage - repairRate * dt);
+                    room.fire = Math.Max(0f, room.fire - repairRate * 0.8f * dt);
+                    room.breach = Math.Max(0f, room.breach - repairRate * 0.55f * dt);
+                }
 
                 var lineage = LineageRules.Get(crew.lineage);
                 var identityModifiers = TraitRules.Modifiers(crew);
@@ -640,6 +648,7 @@ namespace AetherArk.Core
                 var oxygenDanger = (room.oxygen < 22f ? 3.2f : 0f) * lineage.oxygenDamageMultiplier * identityModifiers.oxygenDamageMultiplier;
                 var danger = fireDanger + intruderDanger + oxygenDanger;
                 crew.health = Math.Max(0f, crew.health - danger * dt);
+                if (crew.IsDowned) CrewMovementRules.Stop(crew);
             }
 
             var infirmary = State.playerShip.GetSystem(ShipSystemType.Infirmary);
@@ -649,7 +658,7 @@ namespace AetherArk.Core
                 for (var i = 0; i < State.crew.Count; i++)
                 {
                     var crew = State.crew[i];
-                    if (!crew.isDead && !crew.onSortie && crew.currentRoom == ShipSystemType.Infirmary && crew.health > 0f)
+                    if (crew.IsAtStation && crew.currentRoom == ShipSystemType.Infirmary)
                         crew.health = Math.Min(crew.maxHealth, crew.health + dt * (2f + infirmary.EffectivePower) * ModuleRules.Modifiers(State).healRate * healingAura);
                 }
             }
@@ -661,7 +670,7 @@ namespace AetherArk.Core
             for (var i = 0; i < State.crew.Count; i++)
             {
                 var helper = State.crew[i];
-                if (!helper.IsActive || helper.currentRoom != downed.currentRoom) continue;
+                if (!helper.IsAtStation || helper.currentRoom != downed.currentRoom) continue;
                 multiplier = Math.Min(multiplier, TraitRules.Modifiers(helper).rescueAidTimerMultiplier);
             }
             return multiplier;
@@ -673,7 +682,7 @@ namespace AetherArk.Core
             for (var i = 0; i < State.crew.Count; i++)
             {
                 var crew = State.crew[i];
-                if (!crew.IsActive || crew.currentRoom != ShipSystemType.Infirmary) continue;
+                if (!crew.IsAtStation || crew.currentRoom != ShipSystemType.Infirmary) continue;
                 var skill = crew.role == CrewRole.Medic ? CrewProgressionRules.SkillMultiplier(crew, 0.15f) : 1f;
                 multiplier = Math.Max(multiplier, TraitRules.Modifiers(crew).infirmaryAuraMultiplier * skill);
             }
@@ -707,7 +716,7 @@ namespace AetherArk.Core
         {
             if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
             var system = State.playerShip.GetSystem(type);
-            var resonator = State.crew.Find(crew => crew.role == CrewRole.Resonator && crew.IsActive && crew.currentRoom == type);
+            var resonator = State.crew.Find(crew => crew.role == CrewRole.Resonator && crew.IsAtStation && crew.currentRoom == type);
             if (system == null || system.maxPower == 0) return CommandResult.Fail("command.invalid_system");
             if (resonator == null) return CommandResult.Fail("command.need_resonator");
             if (system.overchargeSeconds > 0f) return CommandResult.Fail("command.already_overcharged");
@@ -737,9 +746,14 @@ namespace AetherArk.Core
         {
             if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
             var crew = State.crew.Find(item => item.id == crewId);
-            if (crew == null || crew.isDead || crew.onSortie || State.playerShip.GetRoom(room) == null)
+            if (crew == null || !crew.IsActive || State.playerShip.GetRoom(room) == null)
                 return CommandResult.Fail("command.crew_unavailable");
-            crew.currentRoom = room;
+            if ((crew.IsMoving && crew.movement.destination == room) || (!crew.IsMoving && crew.currentRoom == room))
+                return CommandResult.Ok("command.crew_moved");
+            var path = CrewMovementRules.Path(ContentCatalog.DeckPlanFor(State.playerShip), crew, room, State.crew.IndexOf(crew));
+            if (path.Count == 0) return CommandResult.Fail("command.crew_no_path");
+            crew.movement.path = path;
+            crew.movement.destination = room;
             State.hasMovedCrew = true;
             return CommandResult.Ok("command.crew_moved");
         }
@@ -962,7 +976,7 @@ namespace AetherArk.Core
 
         private float PostedSkillBonus(CrewRole role, ShipSystemType room, float bonusPerLevel)
         {
-            var crew = State.crew.Find(member => member.role == role && member.IsActive && member.currentRoom == room);
+            var crew = State.crew.Find(member => member.role == role && member.IsAtStation && member.currentRoom == room);
             return crew == null ? 0f : Math.Max(0, crew.skillLevel - 1) * bonusPerLevel;
         }
 
@@ -994,6 +1008,7 @@ namespace AetherArk.Core
             if (pilot == null) return CommandResult.Fail("command.pilot_missing");
             if (pilot.isDead) return CommandResult.Fail("command.pilot_dead");
             if (pilot.IsDowned) return CommandResult.Fail("command.pilot_downed");
+            if (pilot.IsMoving) return CommandResult.Fail("command.pilot_moving");
             if (pilot.onSortie || State.squadrons.Exists(other => other != squadron && other.pilotCrewId == pilot.id &&
                 (other.status == SquadronStatus.Launching || other.status == SquadronStatus.OnMission || other.status == SquadronStatus.Recovering)))
                 return CommandResult.Fail("command.pilot_busy");
@@ -1384,6 +1399,7 @@ namespace AetherArk.Core
                 AddLog("log.crew_level_up", recruit == null ? leveled[i].displayName : recruit.nameKey);
             }
             for (var i = 0; i < State.crew.Count; i++) State.crew[i].onSortie = false;
+            CrewMovementRules.CompleteBetweenBattles(State);
             if (State.isFinalBattle && State.regionIndex < State.regionCount)
             {
                 AdvanceRegion();

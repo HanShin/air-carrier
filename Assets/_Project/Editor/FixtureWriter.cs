@@ -16,9 +16,9 @@ namespace AetherArk.Editor
         [MenuItem("Aether Ark/Write Save Fixtures")]
         public static void WriteSaveFixtures()
         {
-            var root = Path.GetFullPath("Assets/_Project/Tests/EditMode/Fixtures/v2");
+            var root = Path.GetFullPath("Assets/_Project/Tests/EditMode/Fixtures/v3");
             Directory.CreateDirectory(root);
-            if (File.Exists(Path.Combine(root, "profile.json")))
+            if (File.Exists(Path.Combine(root, "profile.json")) || File.Exists(Path.Combine(root, "suspended_run.json")))
             {
                 Debug.Log("Fixtures already exist; preserving the committed snapshot: " + root);
                 return;
@@ -56,8 +56,17 @@ namespace AetherArk.Editor
             run.crew[4].downedSeconds = 3f;
             run.squadrons[0].strength = 2;
 
+            // V3 fixtures contain run schema 2: a real, paused mid-walk battle for future migrations.
+            var simulation = new GameSimulation(run);
+            simulation.BeginCombat(1, false);
+            simulation.MoveCrew(run.crew.Find(c => c.role == CrewRole.Engineer).id, ShipSystemType.Weapons);
+            simulation.SetPaused(false);
+            for (var i = 0; i < 3; i++) simulation.Tick(0.1f);
+            simulation.SetPaused(true);
+
             service.SaveProfile(profile);
             service.SaveRun(run);
+            new ReproductionStore(root).Capture(run, profile);
             Debug.Log("Save fixtures written to " + root);
             AssetDatabase.Refresh();
         }

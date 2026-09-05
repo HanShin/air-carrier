@@ -768,6 +768,7 @@ namespace AetherArk.Runtime
                 var crew = visible[i];
                 var y = 522f - i * 66f;
                 var health = crew.isDead ? L("사망", "DEAD") : crew.IsDowned ? L("구조 대기", "DOWNED") : crew.onSortie ? L("출격 중", "SORTIE") : $"HP {crew.health:0}/{crew.maxHealth:0}";
+                if (crew.IsMoving) health += " → " + l10n.T(state.playerShip.GetSystem(crew.movement.destination).displayKey);
                 var recruit = CrewLibrary.Get(crew.id);
                 var name = recruit == null ? crew.displayName : l10n.T(recruit.nameKey);
                 var label = $"{(crew.isCaptain ? "★ " : "")}{name}\n{l10n.EnumName(crew.role)} · {l10n.EnumName(crew.lineage)} · Lv.{crew.skillLevel}\n{l10n.T(crew.traitKey)} · {l10n.T(crew.backgroundKey)}\n{health}";
@@ -776,7 +777,7 @@ namespace AetherArk.Runtime
                 var localCrew = crew;
                 var button = ui.Button("Crew_" + crew.id, panel, label, () => SelectCrew(localCrew.id),
                     new Vector2(8f, y), new Vector2(184f, 62f), color, UiFactory.TextPrimary, 9);
-                button.interactable = !crew.isDead && !crew.onSortie;
+                button.interactable = crew.IsActive;
                 var labelText = button.GetComponentInChildren<Text>();
                 if (labelText != null)
                 {
@@ -814,7 +815,7 @@ namespace AetherArk.Runtime
                 new Vector2(18f, 552f), new Vector2(664f, 24f), NextThreat(state) <= 3f ? FontStyle.Bold : FontStyle.Normal);
 
             var hint = string.IsNullOrEmpty(selectedCrewId) ? L("방을 클릭하면 전력 조절 대상이 됩니다", "Click a room to select it for power control")
-                : L("이동할 방을 클릭하십시오", "Click the room to move the selected crew");
+                : L("목적지 클릭 · 도착 후 작업 · 선원을 다시 누르면 선택 해제", "Choose destination · work starts on arrival · click crew again to deselect");
             if (showPlayerExterior) hint = L("선체 외형 보기 · 내부 구획을 누르면 조작 화면으로 돌아갑니다", "Exterior view · choose Interior deck to return to room controls");
             ui.Text("BlueprintHint", panel, hint, 12, string.IsNullOrEmpty(selectedCrewId) ? UiFactory.TextMuted : UiFactory.Aether, TextAnchor.MiddleLeft,
                 new Vector2(18f, 8f), new Vector2(664f, 20f));
@@ -830,6 +831,7 @@ namespace AetherArk.Runtime
                 selectedSystem = selectedPlayerSystem,
                 onRoomClick = SelectRoom,
                 crew = state.crew,
+                run = state,
                 selectedCrewId = selectedCrewId,
                 onCrewClick = SelectCrew,
                 reducedMotion = controller.Profile.accessibility.reducedMotion,
@@ -846,7 +848,6 @@ namespace AetherArk.Runtime
             if (!string.IsNullOrEmpty(selectedCrewId))
             {
                 controller.MoveCrew(selectedCrewId, room);
-                selectedCrewId = null;
             }
             else ShowCombat();
         }
@@ -890,7 +891,7 @@ namespace AetherArk.Runtime
             var powerUp = ui.Button("PowerUp", panel, "+", () => controller.ChangePower(system.type, 1), new Vector2(224f, 439f), new Vector2(58f, 48f));
             powerDown.interactable = system.type != ShipSystemType.AetherCore && system.power > 0;
             powerUp.interactable = system.type != ShipSystemType.AetherCore && system.power < system.maxPower && ship.AllocatedPower() < ship.coreOutput;
-            var resonatorPresent = state.crew.Exists(crew => crew.role == CrewRole.Resonator && crew.IsActive && crew.currentRoom == system.type);
+            var resonatorPresent = state.crew.Exists(crew => crew.role == CrewRole.Resonator && crew.IsAtStation && crew.currentRoom == system.type);
             var overcharge = ui.Button("Overcharge", panel, l10n.T("ui.overcharge"), () => controller.Overcharge(system.type),
                 new Vector2(18f, 410f), new Vector2(264f, 28f), UiFactory.Violet, UiFactory.TextPrimary, 13);
             overcharge.interactable = system.maxPower > 0 && system.overchargeSeconds <= 0f && resonatorPresent;

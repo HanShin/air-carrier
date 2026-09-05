@@ -382,6 +382,8 @@ namespace AetherArk.Content
             Add("command.overcharged", "공명 과부하를 시작했습니다.", "Resonance overcharge engaged.");
             Add("command.crew_unavailable", "승무원을 이동시킬 수 없습니다.", "That crew member cannot move.");
             Add("command.crew_moved", "승무원이 새 구획으로 이동합니다.", "Crew member moving to the selected room.");
+            Add("command.crew_no_path", "연결된 출입구가 없어 이동할 수 없습니다.", "No connected doorway route to that room.");
+            Add("command.pilot_moving", "조종사가 이동 중입니다. 도착 후 출격할 수 있습니다.", "Pilot is walking. Launch after arrival.");
             Add("command.weapons_unpowered", "무장실에 동력이 공급되지 않습니다.", "The weapons room has no power.");
             Add("command.weapon_cooldown", "주포가 아직 충전 중입니다.", "The main battery is still charging.");
             Add("command.weapon_fired", "주포 사격 명령을 실행했습니다.", "Main battery fired.");

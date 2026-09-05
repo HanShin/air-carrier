@@ -129,7 +129,7 @@ namespace AetherArk.Tests
                 var service = new SaveService(root);
                 service.SaveRun(simulation.State);
                 var restored = service.LoadRun();
-                Assert.That(restored.schemaVersion, Is.EqualTo(1));
+                Assert.That(restored.schemaVersion, Is.EqualTo(CrewMovementRules.RunVersion));
                 AssertRejectedUnchanged(new GameSimulation(restored), SquadronMission.Bombard, ShipSystemType.Weapons, key);
             }
             finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

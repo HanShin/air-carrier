@@ -9,7 +9,7 @@ namespace AetherArk.Runtime
     public sealed class SaveService
     {
         private const int CurrentProfileVersion = 2;
-        private const int CurrentRunVersion = 1;
+        private const int CurrentRunVersion = CrewMovementRules.RunVersion;
         private readonly string profilePath;
         private readonly string runPath;
         public string RootPath { get; }
@@ -64,6 +64,7 @@ namespace AetherArk.Runtime
                 ClearRun();
                 return;
             }
+            CrewMovementRules.Ensure(run);
             run.schemaVersion = CurrentRunVersion;
             AtomicWrite(runPath, JsonUtility.ToJson(run, true));
         }
@@ -134,6 +135,7 @@ namespace AetherArk.Runtime
         private static RunState MigrateRun(RunState run)
         {
             if (run.schemaVersion < 1) run.schemaVersion = 1;
+            CrewMovementRules.Ensure(run);
             return run;
         }
     }
