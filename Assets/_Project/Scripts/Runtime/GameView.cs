@@ -8,7 +8,7 @@ using UnityEngine.UI;
 
 namespace AetherArk.Runtime
 {
-    public sealed class GameView
+    public sealed partial class GameView
     {
         private readonly GameController controller;
         private readonly UiFactory ui;
@@ -64,6 +64,7 @@ namespace AetherArk.Runtime
             ui.Button("Quit", panel, l10n.T("menu.quit"), controller.Quit,
                 new Vector2(60f, 32f), new Vector2(400f, 62f), new Color(0.22f, 0.13f, 0.16f, 0.95f));
             AddAudioButton(ui.Root, new Vector2(1580f, 966f), new Vector2(280f, 54f));
+            if (Debug.isDebugBuild) AddReproductionButton(ui.Root, new Vector2(1580f, 896f), new Vector2(280f, 54f));
             ui.Text("Version", ui.Root, "VERTICAL SLICE 0.10 · AETHER SOUNDS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
                 new Vector2(1420f, 28f), new Vector2(440f, 30f));
         }
@@ -75,6 +76,7 @@ namespace AetherArk.Runtime
             ui.Text("SetupTitle", ui.Root, l10n.T("setup.title"), 46, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
                 new Vector2(190f, 955f), new Vector2(700f, 72f), FontStyle.Bold);
             AddAudioButton(ui.Root, new Vector2(1460f, 966f), new Vector2(280f, 54f));
+            if (Debug.isDebugBuild) AddReproductionButton(ui.Root, new Vector2(1140f, 966f), new Vector2(280f, 54f));
 
             var left = ui.PanelRect("IdentityPanel", ui.Root, new Vector2(180f, 170f), new Vector2(760f, 740f), PanelColor);
             ui.Text("CaptainLabel", left, l10n.T("setup.captain"), 20, UiFactory.Brass, TextAnchor.MiddleLeft,
@@ -207,7 +209,8 @@ namespace AetherArk.Runtime
         {
             var state = controller.Simulation.State;
             var bar = ui.PanelRect("StatusBar", ui.Root, new Vector2(0f, 990f), new Vector2(1920f, 90f), UiFactory.Ink);
-            ui.Text("ShipName", bar, state.playerShip.displayName, 24, UiFactory.Brass, TextAnchor.MiddleLeft,
+            var shipLabel = state.playerShip.displayName + (controller.IsReproduction ? "\nTEST · Seed " + state.seed : string.Empty);
+            ui.Text("ShipName", bar, shipLabel, controller.IsReproduction ? 18 : 24, UiFactory.Brass, TextAnchor.MiddleLeft,
                 new Vector2(28f, 12f), new Vector2(300f, 66f), FontStyle.Bold);
             var resources = $"{l10n.T("ui.aether")} {state.resources.aether}    {l10n.T("ui.supplies")} {state.resources.supplies}    {l10n.T("ui.ordnance")} {state.resources.ordnance}    {l10n.T("ui.salvage")} {state.resources.salvage}";
             ui.Text("Resources", bar, resources, 19, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
@@ -742,6 +745,7 @@ namespace AetherArk.Runtime
                 new Vector2(330f, 4f), new Vector2(1180f, 48f), FontStyle.Bold);
             ui.Text("Timer", battleStrip, TimeSpan.FromSeconds(state.combatElapsed).ToString(@"mm\:ss"), 20, UiFactory.TextMuted, TextAnchor.MiddleRight,
                 new Vector2(1640f, 4f), new Vector2(200f, 48f));
+            if (Debug.isDebugBuild) AddReproductionButton(battleStrip, new Vector2(1514f, 6f), new Vector2(110f, 44f));
 
             BuildCrewColumn();
             BuildPlayerShipPanel();

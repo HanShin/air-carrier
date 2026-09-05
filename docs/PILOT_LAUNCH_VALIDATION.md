@@ -48,6 +48,6 @@ bash tools/compile_all_csharp.sh
 
 ## 화면 재현과 다음 작업
 
-개발 빌드에서 `-debug-combat cutter -debug-pilots`로 첫 조종사 사망·둘째 구조 대기인 일시정지 전투를 엽니다. `-debug-english -debug-high-contrast`를 추가하면 영어·고대비 검수가 가능합니다. 이 플래그는 릴리스 빌드에서 작동하지 않습니다. 일반 저장 경로를 공유하므로 실제 조작을 포함한 검수는 별도 테스트 프로필에서 수행합니다.
+개발 빌드에서 `-debug-combat cutter -debug-pilots`로 첫 조종사 사망·둘째 구조 대기인 일시정지 전투를 엽니다. `-debug-english -debug-high-contrast`를 추가하면 영어·고대비 검수가 가능합니다. 이 플래그는 릴리스 빌드에서 작동하지 않습니다. 후속 재현실 구현부터 디버그 저장은 일반 저장과 분리됩니다(`REPRODUCTION_LAB.md`).
 
 이 작업 당시 다음 우선순위는 **서풍 연의 세 번째 편대 표시·조작**이었습니다. 이후 전체 편대 UI와 단축키·회귀 테스트 보강을 완료했습니다(`SQUADRON_UI_COMPLETION.md`). 다음은 수동 시드 재현·운용 검증이며, 마지막으로 밸런스 조정을 진행합니다.

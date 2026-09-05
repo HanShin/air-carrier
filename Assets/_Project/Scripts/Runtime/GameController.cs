@@ -8,7 +8,7 @@ namespace AetherArk.Runtime
 {
     public enum FrontendScreen { Menu, Setup, Game }
 
-    public sealed class GameController : MonoBehaviour
+    public sealed partial class GameController : MonoBehaviour
     {
         public ProfileState Profile { get; private set; }
         public GameSimulation Simulation { get; private set; }
@@ -134,6 +134,7 @@ namespace AetherArk.Runtime
         {
             if (!Debug.isDebugBuild) return;
             var args = Environment.GetCommandLineArgs();
+            if (PrepareDevelopmentSession(args)) return;
             // Visual QA overrides are only enabled in development builds.
             var flagshipArg = Array.IndexOf(args, "-debug-flagship");
             if (flagshipArg >= 0 && flagshipArg + 1 < args.Length && ContentCatalog.GetFlagship(args[flagshipArg + 1]) != null)
@@ -187,6 +188,7 @@ namespace AetherArk.Runtime
         {
             Audio.Observe(Simulation);
             if (HandleKeyboardShortcuts()) return;
+            if (ReproductionPanelOpen) return;
             if (Simulation == null || Screen != FrontendScreen.Game) return;
             if (Simulation.State.phase == GamePhase.Combat && Input.GetKeyDown(GetPauseKey()))
             {
@@ -216,6 +218,13 @@ namespace AetherArk.Runtime
 
         private bool HandleKeyboardShortcuts()
         {
+            if (Debug.isDebugBuild && Input.GetKeyDown(KeyCode.F9)) { ToggleReproductionPanel(); return true; }
+            if (ReproductionPanelOpen)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape)) ToggleReproductionPanel();
+                else if (Input.GetKeyDown(KeyCode.F8)) StepReproduction();
+                return true;
+            }
             if (Input.GetKeyDown(KeyCode.F10)) { ToggleAudioSettings(); return true; }
             if (AudioSettingsOpen)
             {
@@ -279,6 +288,7 @@ namespace AetherArk.Runtime
                     break;
 
                 case GamePhase.Combat:
+                    if (Debug.isDebugBuild && IsReproduction && Input.GetKeyDown(KeyCode.F8)) { StepReproduction(); return true; }
                     if (Input.GetKeyDown(KeyCode.Z)) { view.ToggleDeckZoom(); return true; }
                     if (Input.GetKeyDown(KeyCode.F)) { Fire(ShipSystemType.Weapons); return true; }
                     if (Input.GetKeyDown(KeyCode.S)) { UseSupport(); return true; }
@@ -307,6 +317,7 @@ namespace AetherArk.Runtime
 
         public void ShowMenu()
         {
+            ReproductionPanelOpen = false;
             AudioSettingsOpen = false;
             Screen = FrontendScreen.Menu;
             Simulation = null;
@@ -317,6 +328,7 @@ namespace AetherArk.Runtime
 
         public void ShowSetup()
         {
+            ReproductionPanelOpen = false;
             AudioSettingsOpen = false;
             Screen = FrontendScreen.Setup;
             Simulation = null;
@@ -372,6 +384,7 @@ namespace AetherArk.Runtime
 
         private void RefreshCurrentScreen()
         {
+            if (ReproductionPanelOpen) { view.ShowReproductionPanel(); return; }
             if (AudioSettingsOpen) { view.ShowAudioSettings(); return; }
             if (Screen == FrontendScreen.Menu) view.ShowMenu(saves.HasRun());
             else if (Screen == FrontendScreen.Setup) view.ShowSetup();
@@ -380,6 +393,7 @@ namespace AetherArk.Runtime
 
         public void ToggleAudioSettings()
         {
+            if (ReproductionPanelOpen) return;
             AudioSettingsOpen = !AudioSettingsOpen;
             if (AudioSettingsOpen)
             {
@@ -425,8 +439,9 @@ namespace AetherArk.Runtime
         private void LateUpdate()
         {
             Audio.Observe(Simulation);
-            Audio.Tick(Time.unscaledDeltaTime, Simulation?.State, AudioSettingsOpen);
-            if (!AudioSettingsOpen && Screen == FrontendScreen.Game && Simulation != null && Simulation.State.phase == GamePhase.Combat)
+            Audio.Tick(Time.unscaledDeltaTime, Simulation?.State, AudioSettingsOpen || ReproductionPanelOpen);
+            if (ReproductionPanelOpen) view.FitReproductionPanel();
+            if (!AudioSettingsOpen && !ReproductionPanelOpen && Screen == FrontendScreen.Game && Simulation != null && Simulation.State.phase == GamePhase.Combat)
                 view.FitSquadronPanel();
         }
 
@@ -511,7 +526,7 @@ namespace AetherArk.Runtime
         public void SkipEncounter() => Apply(() => Simulation.SkipEncounter(), SoundCue.Confirm);
         public void TogglePause()
         {
-            if (Simulation == null || AudioSettingsOpen) return;
+            if (Simulation == null || AudioSettingsOpen || ReproductionPanelOpen) return;
             Simulation.TogglePause();
             Audio.Play(Simulation.State.isPaused ? SoundCue.Pause : SoundCue.Resume);
             PersistAndRefresh();
@@ -537,7 +552,7 @@ namespace AetherArk.Runtime
             Apply(() => Simulation.Execute(new LaunchSquadronCommand(squadronId, mission, target)));
         public void LaunchSquadronShortcut(int slot)
         {
-            if (Simulation == null || Screen != FrontendScreen.Game || AudioSettingsOpen || Simulation.State.phase != GamePhase.Combat ||
+            if (Simulation == null || Screen != FrontendScreen.Game || AudioSettingsOpen || ReproductionPanelOpen || Simulation.State.phase != GamePhase.Combat ||
                 slot < 0 || slot >= SquadronShortcuts.MaxSlots || slot >= Simulation.State.squadrons.Count) return;
             var squadron = Simulation.State.squadrons[slot];
             LaunchSquadron(squadron.id, SquadronShortcuts.MissionFor(slot, squadron), Simulation.State.selectedEnemySystem);
@@ -550,7 +565,7 @@ namespace AetherArk.Runtime
 
         private void Apply(Func<CommandResult> action, SoundCue? confirmation = null)
         {
-            if (Simulation == null || AudioSettingsOpen) return;
+            if (Simulation == null || AudioSettingsOpen || ReproductionPanelOpen) return;
             Audio.Observe(Simulation);
             var result = action();
             if (!result.success) Audio.Play(SoundCue.Reject);
@@ -570,7 +585,7 @@ namespace AetherArk.Runtime
 
         private void RecordFirstExpeditionCompletion()
         {
-            if (Simulation == null || Simulation.State.phase != GamePhase.Victory) return;
+            if (Simulation == null || IsReproduction || Simulation.State.phase != GamePhase.Victory) return;
             UnlockRules.RecordVictory(Profile, Simulation.State);
             saves.SaveProfile(Profile);
         }

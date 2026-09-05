@@ -12,10 +12,12 @@ namespace AetherArk.Runtime
         private const int CurrentRunVersion = 1;
         private readonly string profilePath;
         private readonly string runPath;
+        public string RootPath { get; }
 
         public SaveService(string rootPath = null)
         {
             var root = string.IsNullOrEmpty(rootPath) ? Application.persistentDataPath : rootPath;
+            RootPath = Path.GetFullPath(root);
             Directory.CreateDirectory(root);
             profilePath = Path.Combine(root, "profile.json");
             runPath = Path.Combine(root, "suspended_run.json");

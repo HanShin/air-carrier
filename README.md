@@ -6,6 +6,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 
 ## What is implemented
 
+- Development reproduction lab: **F9** opens seed/flagship/difficulty controls, immutable combat snapshot capture/load and **F8** 0.1-second stepping. Test runs use a separate profile/run directory and can return to the untouched normal game. All legacy `-debug-*` entries are now isolated too. Snapshot integrity/schema checks reject invalid imports; loaded battles open paused and warn about different builds. See `docs/REPRODUCTION_LAB.md` for CLI flags, storage and determinism limits.
 - Audio pass (0.10): five original synthesized music loops for voyage/menu, port, encounters, combat and the finale; fourteen effects for weapons, sorties, resonance, alerts and outcomes. Music crossfades and ducks while combat is paused. A persistent seven-source audio layer survives UI rebuilds without replaying cues or changing simulation RNG. Open **Audio / F10** on any screen for independent music/effects volume, mute and an effect preview. Settings hold combat and restore its prior pause state on close; profile v1 migrates to v2 while run saves remain v1. See `docs/AUDIO_IMPLEMENTATION.md` for source, validation and prototype limitations.
 - Fleet visual refresh (0.9): three dedicated flagship hull sprites, redesigned cutter/cruiser/warden art, a cinematic carrier title screen and a live flagship preview during setup. Cutaway rooms follow measured hull bounds with recessed metal surfaces and equipment details. Exterior/inside views and deck enlargement preserve all combat controls; selecting a crew member opens the enlarged player deck. See `docs/FLEET_VISUAL_REFRESH.md` for the asset paths, exact generation prompts and scope (2D art, not 3D meshes).
 - Combat UX pass: mouse-ready command bindings, disabled-state feedback, room integrity/power/hazard bars, layered defense meters, and threat countdowns.
@@ -52,6 +53,7 @@ The repository now reaches the original plan's headline content counts—three f
 Keyboard access for the current slice:
 
 - All screens: `F10` audio settings; `Esc` / `F10` returns from audio settings without abandoning the run.
+- Development builds: `F9` reproduction lab (also available from menu/setup/combat buttons), `F8` one 0.1-second step in a paused test battle. `F9`/`Esc` closes the lab. It holds combat without changing the captured pause state.
 - Menu: `N` new expedition, `C` continue, `L` language.
 - Setup: `Enter` launch, `Esc` back.
 - Route and encounters: `1`–`9` choose the numbered available option.
@@ -61,13 +63,15 @@ Emergency ordnance first consumes salvage, then supplies, then lives. It adds in
 
 Development builds accept `-debug-combat [cutter|carrier|scout|boarder|cruiser|monitor]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation. `-debug-route [jumps]` opens the route map after auto-resolving that many jumps so storm bands and visited nodes are visible. `-debug-event <id>` opens one authored event directly. `-debug-port` opens the port after clearing the first gate. `-debug-setup` opens expedition setup.
 
-Add `-debug-pilots` to a debug combat to mark the first wing's pilot dead and the second downed, for launch-blocking UI checks. Combine with `-debug-english` and `-debug-high-contrast` for localized visual QA. Debug scenarios use normal persistence; use a disposable test profile for interactive checks.
+Add `-debug-pilots` to a debug combat to mark the first wing's pilot dead and the second downed, for launch-blocking UI checks. Combine with `-debug-english` and `-debug-high-contrast` for localized visual QA. All debug scenarios now use isolated persistence under `reproduction/session`; normal profiles and runs are not overwritten.
+
+For exact seeds use `-debug-seed 17000 -debug-flagship ship_zephyr -debug-difficulty Standard`, adding `-debug-battle` for a natural first-tier battle instead of a route. Use `-debug-snapshot <absolute capture path>` for a captured mid-campaign state, or `-debug-repro` to open the lab directly. Seed and snapshot entry points cannot be mixed with legacy scenario/search flags. A seed alone does not recreate the autoplayer's subsequent choices or late-campaign loadout.
 
 Default pause is `Space`; it can be changed to `P` during expedition setup. Save files are written under `Application.persistentDataPath` as `profile.json` and `suspended_run.json`.
 
 ## Tests and validation
 
-- Current Unity suite: 179 EditMode and 19 PlayMode tests, including pilot eligibility, read-only rejection, rescue/recovery, save/resume, localized disabled buttons, all-bay layout/raycast checks, narrow/enlarged canvases, shortcut routing and port wing replacement.
+- Current Unity suite: 216 EditMode and 28 PlayMode tests, including pilot eligibility, read-only rejection, rescue/recovery, save/resume, localized disabled buttons, all-bay layout/raycast checks, shortcut routing, port wing replacement, exact seed parsing, snapshot integrity, fixed-step reproduction and normal-save isolation.
 - In Unity: **Window → General → Test Runner → EditMode → Run All**.
 - Command-line Unity test: `Unity -batchmode -nographics -projectPath <repo> -runTests -testPlatform EditMode -testResults <results.xml>`.
 - macOS development build: execute `AetherArk.Editor.ProjectBuilder.BuildMac`; output is `Builds/AetherArk.app`.

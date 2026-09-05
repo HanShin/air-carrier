@@ -1,6 +1,6 @@
 # 남은 작업 목록 (Remaining work)
 
-기준일: 2026-09-05. 조종사 출격 검증에 이어 서풍 연의 세 번째 편대 표시·조작을 완료했습니다. Unity 테스트는 198개이며 게임 수치·세이브 스키마는 변경하지 않았습니다. 최신 UI 변경은 `docs/SQUADRON_UI_COMPLETION.md`, 이전 출격 검증과 600회 회귀 결과는 `docs/PILOT_LAUNCH_VALIDATION.md`, 정책 비교는 `docs/WING_POLICY_AUDIT.md` 참고.
+기준일: 2026-09-05. 개발 빌드 F9 재현실에 시드 지정·전투 스냅샷·0.1초 단계 진행·일반 저장 격리를 추가했습니다. Unity 테스트는 244개이며 게임 수치와 기존 프로필/런 스키마는 변경하지 않았습니다(별도 스냅샷 형식 v1 추가). 사용법은 `docs/REPRODUCTION_LAB.md`, 이전 UI/출격 검증은 `docs/SQUADRON_UI_COMPLETION.md`와 `docs/PILOT_LAUNCH_VALIDATION.md`, 정책 비교는 `docs/WING_POLICY_AUDIT.md` 참고.
 
 ## 1. 1.0 콘텐츠에서 아직 안 한 것
 
@@ -26,7 +26,8 @@
 
 - **편대 정책 비교 완료:** `legacy/once/always/healthy/adaptive`와 출격·군수품·기체 손실·공습·정찰 계측 추가. 전력 온전 시 출격만으로는 서풍 11%, 상황 대응 17%. 기본은 비교 보존용 `legacy`; 자세한 정책·시드별 JSON은 `WING_POLICY_AUDIT.md`와 `docs/audits/`.
 - **조종사 출격 검증 완료:** 사망·구조 대기·미배정·다른 편대 출격 중 조종사를 명령/UI 공통 검사로 차단. 구조 후 재출격, 중복 배정, 기체 보충과 사망 구분, 저장·복구를 회귀 테스트. 600회 비교의 시드별 승패는 유지됐고 기존 정책 2회의 출격·자원 등 세부 기록만 달라짐.
-- **다음: 수동 재현 경로.** 세 번째 편대 표시 제한을 해소했으므로, 수동 플레이용 시드/스냅샷 경로를 보강. 실제 사람의 운용을 확인한 후 밸런스 조정.
+- **수동 재현 도구 완료:** F9 시드/기함/난이도·전투 스냅샷 저장/불러오기·F8 0.1초 단계 진행. 일반 저장/해금을 보호하는 별도 세션이며 기존 디버그 진입도 격리. 시드만으로 후반 전투를 재현한다고 보장하지 않음.
+- **다음: 감사 지점 스냅샷 내보내기와 수동 A/B.** 헤드리스 감사의 특정 시드·전투 상태를 재현실로 넘기는 연결을 보강. 서풍 사례의 기관사 잔류·정찰 유지·요격 예약을 사람이 비교하고 기록한 뒤 밸런스 조정.
 - **시간 제한과 교착 구분:** 이야기 여명 시드 373355는 420초 제한에 걸렸지만 600초 진단에서 해당 전투를 통과. 기본 제한은 유지하며 미결 결과로 별도 집계·종료 코드 3. 패배 또는 영구 교착으로 단정하지 않음.
 - 침입자 대응(해병 이동) 없음 → 강습 바지선 계열이 과소평가됨.
 - 전력 배분은 여분을 무장실에만 넣음. 상황별(결계·엔진) 배분 없음.
@@ -49,8 +50,8 @@
 - `run_headless_audit.sh`가 이제 `Core/*.cs`·`Content/*.cs`를 글롭하므로(`dc11a45`) 새 Core 파일은 자동 포함되지만, 외부 dotnet 하네스(`scratchpad`)는 세션별 임시물이라 저장소에 없음. `tools/`에 dotnet 테스트·감사 프로젝트를 체크인하면 Mono 없이도 CI에서 돌릴 수 있음.
 
 - `GameView.cs`(~1,100줄)와 `GameSimulation.cs`(~1,300줄)가 큼. 화면별·규칙군별 파일 분리 권장(`ShipBlueprintView`처럼).
-- EditMode 테스트 179개: 기존 시뮬레이션 121개가 `GameSimulationTests.cs`에 집중됨. 아트 3개·음향/이전 12개·조종사 출격 검증 27개·편대 단축키 16개는 별도 파일. 콘텐츠·전투·캠페인·저장 분리 권장.
-- PlayMode 테스트 19개: 기존 전투·항구·아트 UI 6개, 음향 4개, 조종사 검증 3개, 전체 편대 UI/단축키·귀환/재개·교체·너비 보정 6개. 새 편대 UI 검사는 임시 저장소를 사용하지만 기존 검사도 실제 테스트 프로필과 분리하도록 정리 권장.
+- EditMode 테스트 216개: 기존 시뮬레이션 121개, 아트 3개, 음향/이전 12개, 조종사 27개, 편대 단축키 16개, 재현 저장소/시드/결정론 37개. 기존 시뮬레이션 테스트의 콘텐츠·전투·캠페인·저장 분리 권장.
+- PlayMode 테스트 28개: 기존 전투·항구·아트 UI 6개, 음향 4개, 조종사 3개, 전체 편대 UI 6개, 재현실 9개. 새 편대/재현 UI 검사는 임시 저장소를 사용하지만 기존 검사도 실제 테스트 프로필과 분리하도록 정리 권장.
 - 세이브 픽스처 v1·v2 존재. 프로필만 v2(음향 설정), 런은 v1 유지. `FixtureWriter`는 기존 스냅샷을 덮어쓰지 않음. 다음 스키마 변경 시 새 폴더로 갱신.
 - 생성 스크립트 4종(`gen_events/modules/weapons/wings/enemies.py`)은 수동 실행. 검증기(`validate_project.py`)에 "생성 결과가 최신인지" 검사 추가 권장.
 - Unity 6000.6.0f1로 에디터가 프로젝트를 자동 업그레이드함(README는 Unity 6 LTS 명시). 팀 표준 버전 확정 필요.
@@ -71,6 +72,10 @@
 
 | 플래그 | 동작 |
 |---|---|
+| `-debug-repro` | F9 재현실 화면으로 진입 |
+| `-debug-seed <정수>` | 시드 고정 6공역 테스트 항로. 기본 서풍·Standard, `-debug-difficulty`/`-debug-flagship`로 변경 |
+| `-debug-battle` | `-debug-seed`와 조합해 자연 생성 초기 전투로 진입 |
+| `-debug-snapshot <전체 경로>` | 전용 스냅샷 검사 후 일시정지 복원 |
 | `-debug-combat <구성 id>` | 해당 적과의 전투(예: `cruiser`, `gate_warden`). `-debug-unpaused`, `-debug-damage` 조합 가능 |
 | `-debug-pilots` | `-debug-combat`과 조합: 첫 편대 조종사 사망·둘째 구조 대기. 출격 차단 안내 검수용 |
 | `-debug-route [n]` | n회 도약 후 루트 지도 |
@@ -80,6 +85,6 @@
 | `-debug-flagship <id>` | 개발용 기함 지정: `ship_vanguard`, `ship_bastion`, `ship_zephyr` |
 | `-debug-english`, `-debug-high-contrast` | 영어 및 고대비 화면 검수 |
 
-디버그 진입도 일반 저장 경로를 사용하므로, 조작을 포함한 검수에는 별도 테스트 프로필을 사용합니다.
+F9 재현실·모든 `-debug-*` 진입은 이제 `reproduction/session`과 `reproduction/snapshots`를 사용하며 일반 저장을 덮어쓰지 않습니다. 새 시드/스냅샷 진입과 기존 시나리오 플래그는 섞지 않습니다. 자세한 복원·버전·파일 경로 규칙은 `REPRODUCTION_LAB.md` 참고.
 
 헤드리스 감사: `bash tools/run_headless_audit.sh [횟수] [난이도] [시드] [옵션]`. 옵션 `--report`, `--records`, `--strategy=cautious`, `--flagship=<id>`, `--enemy=<id>`, `--wings=legacy|once|always|healthy|adaptive`, `--combat-cap=420`. 튜토리얼은 `--tutorial`로만 지정(시드 32838 자체는 일반 캠페인). 일괄 비교는 `python3 tools/compare_wing_policies.py --output <보고서.json>`.

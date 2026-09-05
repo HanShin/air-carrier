@@ -134,6 +134,7 @@ namespace UnityEngine
     public static class Application
     {
         public static string persistentDataPath => "/tmp";
+        public static string unityVersion => "compile-smoke";
         public static void Quit() { }
     }
 
@@ -187,6 +188,8 @@ namespace UnityEngine
         R,
         M,
         F10,
+        F9,
+        F8,
         Alpha1 = 49,
         Alpha2,
         Alpha3,
@@ -254,7 +257,11 @@ namespace UnityEngine.Events
 
 namespace UnityEngine.EventSystems
 {
-    public class EventSystem : UnityEngine.MonoBehaviour { }
+    public class EventSystem : UnityEngine.MonoBehaviour
+    {
+        public static EventSystem current { get; set; }
+        public void SetSelectedGameObject(UnityEngine.GameObject selected) { }
+    }
     public class StandaloneInputModule : UnityEngine.MonoBehaviour { }
 }
 
