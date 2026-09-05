@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "source_sha256": "f80eab3961dc647fcb0586e00080554b189a48e6a48d26d60f92bd30266a20a6",
+  "difficulty": "Story",
+  "base_seed": 373355,
+  "seed_stride": 7919,
+  "runs_per_group": 1,
+  "tutorial": false,
+  "strategy": "standard",
+  "combat_time_cap": 600.0,
+  "note": "Autoplayer comparison, not human win rates. Ship values are unchanged. Timeouts are inconclusive, not losses.",
+  "groups": [
+    {
+      "flagship": "ship_vanguard",
+      "policy": "adaptive",
+      "summary": {
+        "wins": 0,
+        "runs": 1,
+        "win_percent": 0.0,
+        "wilson_95_percent": [
+          0.0,
+          79.35
+        ],
+        "battles": 23,
+        "timeouts": 0,
+        "losses": 1,
+        "sorties_per_battle": 2.391,
+        "wing_ordnance_per_battle": 3.522,
+        "airframes_lost_per_battle": 0.391,
+        "raids_per_battle": 0.174,
+        "recon_per_battle": 0.0,
+        "dry_seconds_per_battle": 18.104,
+        "pilot_deaths": 0,
+        "wings_destroyed": 0,
+        "reached_region": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "records": [
+        {
+          "seed": 373355,
+          "victory": 0,
+          "stalemate": 0,
+          "regions": 6,
+          "reached": 6,
+          "jumps": 41,
+          "battles": 23,
+          "seconds": 1601.8,
+          "sorties": 55,
+          "wing_ordnance": 81,
+          "airframes_lost": 9,
+          "wings_destroyed": 0,
+          "raids": 4,
+          "pilot_deaths": 0,
+          "recon": 0,
+          "intercept": 29,
+          "bombard": 16,
+          "dry_seconds": 416.4
+        }
+      ]
+    }
+  ]
+}
