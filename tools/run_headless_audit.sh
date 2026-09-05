@@ -7,11 +7,7 @@ audit_binary="$audit_dir/audit.exe"
 trap 'rm -f "$audit_binary"; rmdir "$audit_dir"' EXIT
 
 cd "$project_root"
-csc -nologo -langversion:latest \
-  -out:"$audit_binary" \
-  Assets/_Project/Scripts/Core/*.cs \
-  Assets/_Project/Scripts/Content/*.cs \
-  tools/HeadlessPlaythrough.cs tools/AuditWingPolicy.cs tools/AuditWingPolicyTests.cs
+python3 -B tools/build_headless_audit.py "$audit_binary"
 
 if [ "$#" -gt 0 ]; then
   mono "$audit_binary" "$@"

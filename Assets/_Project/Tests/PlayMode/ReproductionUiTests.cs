@@ -294,6 +294,35 @@ namespace AetherArk.Tests
             AssertNormalFiles(files);
         }
 
+        [UnityTest]
+        public IEnumerator HeadlessCheckpointShowsProvenanceAndStepsInAnIsolatedSession()
+        {
+            StartNormalBattle(); yield return null;
+            var normal = controller.Simulation; var before = JsonUtility.ToJson(normal.State); var files = NormalSaveBytes();
+            var fixture = Path.Combine(Application.dataPath, "_Project/Tests/EditMode/Fixtures/audit_v1/zephyr-17000-b21-t100.json");
+            var bytes = File.ReadAllBytes(fixture);
+            foreach (var language in new[] { Language.Korean, Language.English })
+            {
+                var args = language == Language.English ? new[] { "-debug-snapshot", fixture, "-debug-english" } : new[] { "-debug-snapshot", fixture };
+                Assert.That((bool)LaunchArguments.Invoke(controller, new object[] { args }), Is.True); yield return null;
+                AssertMessage("repro.different_build");
+                var message = GameObject.Find("ReproductionMessage").GetComponent<Text>().text;
+                Assert.That(message, Does.Contain(language == Language.Korean ? "감사 전투 21" : "Audit battle 21"));
+                Assert.That(message, Does.Contain(language == Language.Korean ? "수동 이어하기" : "manual continuation"));
+                Assert.That(controller.Simulation.State.regionIndex, Is.EqualTo(6));
+                Assert.That(controller.Simulation.State.combatElapsed, Is.EqualTo(10f).Within(.00001f));
+                Assert.That(controller.Simulation.State.isPaused, Is.True);
+                Button("ReproductionStep").onClick.Invoke(); yield return null;
+                Assert.That(controller.Simulation.State.combatElapsed, Is.EqualTo(10.1f).Within(.00001f));
+                Assert.That(controller.Simulation.State.isPaused, Is.True);
+                controller.ReturnFromReproduction(); yield return null;
+                Assert.That(controller.Simulation, Is.SameAs(normal));
+                Assert.That(JsonUtility.ToJson(normal.State), Is.EqualTo(before));
+                AssertNormalFiles(files);
+                Assert.That(File.ReadAllBytes(fixture), Is.EqualTo(bytes));
+            }
+        }
+
         private void StartNormalBattle()
         {
             controller.StartRun(); controller.Simulation.BeginCombat(1, false);

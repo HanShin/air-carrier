@@ -11,20 +11,11 @@ import math
 from pathlib import Path
 import subprocess
 import tempfile
+from build_headless_audit import compile_audit, sources
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICIES = ("legacy", "once", "always", "healthy", "adaptive")
 FLAGSHIPS = ("ship_vanguard", "ship_bastion", "ship_zephyr")
-
-
-def sources():
-    return sorted((ROOT / "Assets/_Project/Scripts/Core").glob("*.cs")) + sorted(
-        (ROOT / "Assets/_Project/Scripts/Content").glob("*.cs")) + [
-        ROOT / "tools" / name for name in ("HeadlessPlaythrough.cs", "AuditWingPolicy.cs", "AuditWingPolicyTests.cs")]
-
-
-def compile_audit(destination):
-    subprocess.run(["csc", "-nologo", "-langversion:latest", f"-out:{destination}", *map(str, sources())], check=True, cwd=ROOT)
 
 
 def records_from(stdout):
@@ -112,7 +103,7 @@ def main():
     if len(set(args.flagships)) != len(args.flagships) or len(set(args.policies)) != len(args.policies):
         parser.error("duplicate flagships/policies would bias the comparison")
     digest = hashlib.sha256()
-    for path in sources() + [Path(__file__).resolve()]:
+    for path in sources() + [ROOT / "tools/build_headless_audit.py", Path(__file__).resolve()]:
         digest.update(str(path.relative_to(ROOT)).encode())
         digest.update(path.read_bytes())
     groups = []

@@ -70,8 +70,14 @@ namespace AetherArk.Runtime
             var step = ui.Button("ReproductionStep", panel, L("0.1초 진행 [F8]", "Step 0.1 s [F8]"), controller.StepReproduction,
                 new Vector2(936f, 234f), new Vector2(440f, 56f), UiFactory.PanelSoft, UiFactory.Aether, 20);
             step.interactable = controller.CanStepReproduction;
+            var details = controller.ReproductionDetails;
+            var audit = controller.ReproductionAudit;
+            if (audit != null && !string.IsNullOrEmpty(audit.producer) &&
+                (controller.ReproductionMessageKey == "repro.loaded" || controller.ReproductionMessageKey == "repro.different_build"))
+                details = string.Format(L("감사 전투 {0} · 틱 {1} × 0.1초 · {2} · 수동 이어하기", "Audit battle {0} · tick {1} × 0.1 s · {2} · manual continuation"),
+                    audit.battleOrdinal, audit.completedTicks, audit.wingPolicy);
             ui.Text("ReproductionMessage", panel, l10n.T(controller.ReproductionMessageKey) +
-                (string.IsNullOrEmpty(controller.ReproductionDetails) ? string.Empty : "\n" + controller.ReproductionDetails),
+                (string.IsNullOrEmpty(details) ? string.Empty : "\n" + details),
                 17, UiFactory.Brass, TextAnchor.MiddleLeft, new Vector2(44f, 132f), new Vector2(1332f, 86f));
             ui.Button("ReproductionClose", panel, L("닫기 [F9 / Esc]", "Close [F9 / Esc]"), controller.ToggleReproductionPanel,
                 new Vector2(44f, 58f), new Vector2(418f, 56f), UiFactory.PanelSoft, UiFactory.TextPrimary, 20);

@@ -3,40 +3,19 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Security.Cryptography;
 using System.Reflection;
-using System.Text;
 using AetherArk.Content;
 using AetherArk.Core;
 using UnityEngine;
 
 namespace AetherArk.Runtime
 {
-    [Serializable]
-    public sealed class CombatSnapshot
-    {
-        public string format;
-        public int formatVersion;
-        public string createdUtc;
-        public string simulationBuild;
-        public string unityVersion;
-        public string payloadJson;
-        public string sha256;
-    }
-
-    [Serializable]
-    public sealed class CombatSnapshotPayload
-    {
-        public RunState run;
-        public ProfileState profile;
-    }
-
     /// <summary>Immutable, checksummed combat captures. Never accesses the normal profile or suspended run.</summary>
     public sealed class ReproductionStore
     {
-        public const string Format = "aether-ark-combat-snapshot";
-        public const int FormatVersion = 1;
-        public const long MaxSnapshotBytes = 8 * 1024 * 1024;
+        public const string Format = CombatSnapshotFile.Format;
+        public const int FormatVersion = CombatSnapshotFile.FormatVersion;
+        public const long MaxSnapshotBytes = CombatSnapshotFile.MaxSnapshotBytes;
         public static string SimulationBuild => typeof(GameSimulation).Assembly.ManifestModule.ModuleVersionId.ToString("N");
         public string RootPath { get; }
         public string SnapshotDirectory => Path.Combine(RootPath, "snapshots");
@@ -65,33 +44,9 @@ namespace AetherArk.Runtime
         public string Capture(RunState run, ProfileState profile)
         {
             Validate(new CombatSnapshotPayload { run = run, profile = profile });
-            var snapshot = new CombatSnapshot
-            {
-                format = Format, formatVersion = FormatVersion,
-                createdUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                simulationBuild = SimulationBuild, unityVersion = Application.unityVersion,
-                payloadJson = JsonUtility.ToJson(new CombatSnapshotPayload { run = run, profile = profile })
-            };
-            snapshot.sha256 = Digest(snapshot.payloadJson);
-            var json = JsonUtility.ToJson(snapshot, true);
-            if (Encoding.UTF8.GetByteCount(json) > MaxSnapshotBytes) throw new InvalidDataException("repro.invalid_snapshot");
-            Directory.CreateDirectory(SnapshotDirectory);
-            var name = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", CultureInfo.InvariantCulture) + "-seed-" +
-                run.seed.ToString(CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".json";
-            var path = Path.Combine(SnapshotDirectory, name);
-            var temporary = path + ".tmp";
-            try
-            {
-                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                {
-                    var bytes = Encoding.UTF8.GetBytes(json);
-                    stream.Write(bytes, 0, bytes.Length);
-                    stream.Flush(true);
-                }
-                File.Move(temporary, path); // Same-directory atomic publish; never overwrites an existing capture.
-            }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
-            return path;
+            return CombatSnapshotFile.Publish(SnapshotDirectory, run.seed,
+                JsonUtility.ToJson(new CombatSnapshotPayload { run = run, profile = profile }),
+                SimulationBuild, Application.unityVersion, snapshot => JsonUtility.ToJson(snapshot, true));
         }
 
         public CombatSnapshotPayload Load(string path, out bool differentBuild)
@@ -107,7 +62,7 @@ namespace AetherArk.Runtime
                 if (snapshot == null || snapshot.format != Format) throw new InvalidDataException("repro.invalid_snapshot");
                 if (snapshot.formatVersion != FormatVersion) throw new InvalidDataException("repro.unsupported_version");
                 if (string.IsNullOrEmpty(snapshot.payloadJson) || string.IsNullOrEmpty(snapshot.sha256) ||
-                    !string.Equals(snapshot.sha256, Digest(snapshot.payloadJson), StringComparison.Ordinal))
+                    !string.Equals(snapshot.sha256, CombatSnapshotFile.Digest(snapshot.payloadJson), StringComparison.Ordinal))
                     throw new InvalidDataException("repro.invalid_snapshot");
                 payload = JsonUtility.FromJson<CombatSnapshotPayload>(snapshot.payloadJson);
             }
@@ -135,12 +90,6 @@ namespace AetherArk.Runtime
             return true;
         }
 
-        private static string Digest(string value)
-        {
-            using (var hash = SHA256.Create())
-                return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", string.Empty).ToLowerInvariant();
-        }
-
         private static void Validate(CombatSnapshotPayload payload)
         {
             var run = payload?.run; var profile = payload?.profile;
@@ -157,6 +106,16 @@ namespace AetherArk.Runtime
                 run.routeNodes.Exists(node => node == null || node.connectedIds == null) || run.combatLog.Exists(entry => entry == null || string.IsNullOrEmpty(entry.key)))
                 throw new InvalidDataException("repro.invalid_snapshot");
             ValidateFinite(payload);
+            // JsonUtility can materialize an absent optional object as an empty instance in older captures.
+            var audit = payload.audit;
+            if (audit != null && !string.IsNullOrEmpty(audit.producer) &&
+                (audit.producer != "headless-audit-v1" || audit.battleOrdinal < 1 || audit.completedTicks < 0 || audit.completedTicks > 36001 ||
+                audit.fixedDelta != 0.1f || audit.boundary != "before-next-orders" || audit.combatCap < 0.1f || audit.combatCap > 3600f ||
+                (audit.strategy != "standard" && audit.strategy != "cautious") ||
+                Array.IndexOf(new[] { "legacy", "once", "always", "healthy", "adaptive" }, audit.wingPolicy) < 0 ||
+                audit.sourceSha256 == null || audit.sourceSha256.Length != 64 ||
+                Array.Exists(audit.sourceSha256.ToCharArray(), character => !Uri.IsHexDigit(character))))
+                throw new InvalidDataException("repro.invalid_snapshot");
             var ids = new HashSet<string>();
             var captain = false;
             foreach (var crew in run.crew)

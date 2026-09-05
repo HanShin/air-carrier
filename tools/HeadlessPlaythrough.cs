@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using AetherArk.Content;
 using AetherArk.Core;
+using AetherArk.Runtime;
 
 internal static class HeadlessPlaythrough
 {
@@ -51,6 +52,7 @@ internal static class HeadlessPlaythrough
     private static bool tutorial;
     private static string wingPolicy = "legacy";
     private static float combatTimeCap = 420f;
+    private static AuditCheckpointExport checkpoint;
 
     private static int Main(string[] args)
     {
@@ -62,6 +64,8 @@ internal static class HeadlessPlaythrough
         var runCount = positional.Count > 0 ? int.Parse(positional[0]) : tutorial ? 1 : 100;
         var difficulty = positional.Count > 1 ? (Difficulty)Enum.Parse(typeof(Difficulty), positional[1], true) : tutorial ? Difficulty.Story : Difficulty.Standard;
         var baseSeed = positional.Count > 2 ? int.Parse(positional[2]) : tutorial ? GameSimulation.FirstExpeditionSeed : 17000;
+        string snapshotDirectory = null;
+        int? snapshotBattle = null, snapshotTick = null;
         if (runCount < 1 || runCount > 10000 || positional.Count > 3 || !Enum.IsDefined(typeof(Difficulty), difficulty))
             throw new ArgumentException("Usage: [1..10000 runs] [Story|Standard|Harsh] [base seed] [options]");
         foreach (var arg in args)
@@ -73,8 +77,12 @@ internal static class HeadlessPlaythrough
             if (arg.StartsWith("--wings=", StringComparison.Ordinal)) wingPolicy = arg.Substring("--wings=".Length);
             if (arg.StartsWith("--combat-cap=", StringComparison.Ordinal)) combatTimeCap = float.Parse(arg.Substring("--combat-cap=".Length));
             if (arg.StartsWith("--flagship=", StringComparison.Ordinal)) flagship = arg.Substring("--flagship=".Length);
+            if (arg.StartsWith("--snapshot-dir=", StringComparison.Ordinal)) snapshotDirectory = arg.Substring("--snapshot-dir=".Length);
+            if (arg.StartsWith("--snapshot-battle=", StringComparison.Ordinal)) snapshotBattle = int.Parse(arg.Substring("--snapshot-battle=".Length));
+            if (arg.StartsWith("--snapshot-tick=", StringComparison.Ordinal)) snapshotTick = int.Parse(arg.Substring("--snapshot-tick=".Length));
             if (arg.StartsWith("--", StringComparison.Ordinal) && arg != "--report" && arg != "--records" && arg != "--tutorial"
-                && !arg.StartsWith("--enemy=") && !arg.StartsWith("--strategy=") && !arg.StartsWith("--flagship=") && !arg.StartsWith("--wings=") && !arg.StartsWith("--combat-cap="))
+                && !arg.StartsWith("--enemy=") && !arg.StartsWith("--strategy=") && !arg.StartsWith("--flagship=") && !arg.StartsWith("--wings=") && !arg.StartsWith("--combat-cap=")
+                && !arg.StartsWith("--snapshot-dir=") && !arg.StartsWith("--snapshot-battle=") && !arg.StartsWith("--snapshot-tick="))
                 throw new ArgumentException("Unknown option: " + arg);
         }
         if (strategy != "standard" && strategy != "cautious") throw new ArgumentException("Unknown strategy: " + strategy);
@@ -83,6 +91,34 @@ internal static class HeadlessPlaythrough
         if (flagship != null && ContentCatalog.GetFlagship(flagship) == null) throw new ArgumentException("Unknown flagship: " + flagship);
         if (tutorial && (runCount != 1 || baseSeed != GameSimulation.FirstExpeditionSeed || (flagship != null && flagship != "ship_vanguard")))
             throw new ArgumentException("Tutorial audit requires one run, seed 32838 and the Dawn Refuge.");
+        if (snapshotDirectory != null || snapshotBattle.HasValue || snapshotTick.HasValue)
+        {
+            if (string.IsNullOrWhiteSpace(snapshotDirectory) || !snapshotBattle.HasValue || snapshotBattle < 1 ||
+                !snapshotTick.HasValue || snapshotTick < 0 || snapshotTick > 36001 || runCount != 1 ||
+                (!tutorial && positional.Count != 3) || records || report)
+                throw new ArgumentException("Checkpoint export requires one explicit seed (or --tutorial), --snapshot-dir, --snapshot-battle >= 1 and --snapshot-tick 0..36001; no --records/--report.");
+            checkpoint = new AuditCheckpointExport
+            {
+                Directory = snapshotDirectory,
+                Metadata = new AuditCheckpointMetadata
+                {
+                    producer = "headless-audit-v1", sourceSha256 = AuditBuild.SourceSha256,
+                    battleOrdinal = snapshotBattle.Value, completedTicks = snapshotTick.Value, fixedDelta = 0.1f,
+                    boundary = "before-next-orders", strategy = strategy, wingPolicy = wingPolicy,
+                    forcedEnemy = forcedEnemy ?? string.Empty, combatCap = combatTimeCap
+                }
+            };
+            var exported = Play(baseSeed, difficulty);
+            if (checkpoint.CapturedPath != null)
+            {
+                Console.WriteLine("SNAPSHOT " + checkpoint.CapturedPath);
+                Console.WriteLine($"CHECKPOINT seed={baseSeed} battle={snapshotBattle} ticks={snapshotTick} step=0.1 boundary=before-next-orders; manual continuation only.");
+                return 0; // A capture is not a completed campaign or a victory.
+            }
+            Console.Error.WriteLine($"CHECKPOINT UNREACHED seed={baseSeed} battle={snapshotBattle} ticks={snapshotTick}; " +
+                $"reached_battles={exported.Battles} region={exported.RegionReached} victory={exported.Victory} defeat={exported.Defeat} timeout={exported.Stalemate}. No snapshot written; no fallback seed/battle.");
+            return 4;
+        }
         var results = new List<Result>();
         for (var i = 0; i < runCount; i++) results.Add(Play(baseSeed + i * 7919, difficulty));
         if (records) foreach (var result in results) PrintRecord(result);
@@ -268,7 +304,8 @@ internal static class HeadlessPlaythrough
                     };
                     var hullBefore = simulation.State.playerShip.hull;
                     var regionBefore = simulation.State.regionIndex;
-                    record.Seconds = ResolveCombat(simulation, record);
+                    record.Seconds = ResolveCombat(simulation, record, profile, result.Battles);
+                    if (checkpoint?.CapturedPath != null) return result;
                     record.Won = simulation.State.phase != GamePhase.Defeat && simulation.State.phase != GamePhase.Combat;
                     record.HullLost = Math.Max(0f, hullBefore - simulation.State.playerShip.hull);
                     result.ActiveCombatSeconds += record.Seconds;
@@ -472,9 +509,13 @@ internal static class HeadlessPlaythrough
         return score;
     }
 
-    private static float ResolveCombat(GameSimulation simulation, BattleRecord record)
+    private static float ResolveCombat(GameSimulation simulation, BattleRecord record, ProfileState profile, int battle)
     {
+        // Tick zero is battle entry, before even the initial crew/power orders. Later checkpoints are
+        // after exactly N completed Tick(.1f) calls, before the next audit command batch.
+        if (checkpoint?.TryCapture(simulation.State, profile, battle, 0) == true) return 0f;
         var elapsed = 0f;
+        var completedTicks = 0;
         var overcharged = false;
         var policy = new AuditWingPolicy(wingPolicy);
         Action<CombatLogEntry> observer = entry =>
@@ -484,58 +525,63 @@ internal static class HeadlessPlaythrough
             if (entry.key == "log.enemy_squadron_hit" || entry.key == "log.boarders") record.UnopposedRaids++;
         };
         simulation.LogAdded += observer;
-        var resonator = simulation.State.crew.Find(crew => crew.role == CrewRole.Resonator);
-        if (resonator != null) simulation.MoveCrew(resonator.id, ShipSystemType.Weapons);
-        // Route spare core output into the weapons room so every mounted weapon can be powered.
-        var ship = simulation.State.playerShip;
-        var weaponsSystem = ship.GetSystem(ShipSystemType.Weapons);
-        // Spare power beyond the mounted weapons still shortens every reload, so route all of it.
-        while (weaponsSystem != null && weaponsSystem.power < weaponsSystem.maxPower && ship.AllocatedPower() < ship.coreOutput)
-            simulation.ChangePower(ShipSystemType.Weapons, 1);
-        var order = wingPolicy == "legacy"
-            ? new[] { SquadronType.Bomber, SquadronType.Interceptor }
-            : new[] { SquadronType.Interceptor, SquadronType.Escort, SquadronType.Recon, SquadronType.Bomber, SquadronType.Assault };
-
-        while (simulation.State.phase == GamePhase.Combat && elapsed < combatTimeCap)
+        try
         {
-            simulation.FireAllReady(ShipSystemType.Weapons);
+            var resonator = simulation.State.crew.Find(crew => crew.role == CrewRole.Resonator);
+            if (resonator != null) simulation.MoveCrew(resonator.id, ShipSystemType.Weapons);
+            // Route spare core output into the weapons room so every mounted weapon can be powered.
+            var ship = simulation.State.playerShip;
+            var weaponsSystem = ship.GetSystem(ShipSystemType.Weapons);
+            // Spare power beyond the mounted weapons still shortens every reload, so route all of it.
+            while (weaponsSystem != null && weaponsSystem.power < weaponsSystem.maxPower && ship.AllocatedPower() < ship.coreOutput)
+                simulation.ChangePower(ShipSystemType.Weapons, 1);
+            var order = wingPolicy == "legacy"
+                ? new[] { SquadronType.Bomber, SquadronType.Interceptor }
+                : new[] { SquadronType.Interceptor, SquadronType.Escort, SquadronType.Recon, SquadronType.Bomber, SquadronType.Assault };
 
-            var cautious = strategy == "cautious";
-            if (!cautious)
+            while (simulation.State.phase == GamePhase.Combat && elapsed < combatTimeCap)
             {
-                // Legacy order is intentionally bomber first. All new modes share defense/recon/offense order.
-                foreach (var type in order)
-                foreach (var squadron in simulation.State.squadrons)
+                simulation.FireAllReady(ShipSystemType.Weapons);
+
+                var cautious = strategy == "cautious";
+                if (!cautious)
                 {
-                    if (squadron.type != type || !policy.TryChoose(simulation.State, squadron, out var mission)) continue;
-                    var ordnanceBefore = simulation.State.resources.ordnance;
-                    var target = mission == SquadronMission.Intercept ? ShipSystemType.FlightDeck : ShipSystemType.Weapons;
-                    if (!simulation.LaunchSquadron(squadron.id, mission, target).success) continue;
-                    policy.RecordLaunch(squadron.id);
-                    record.Sorties++;
-                    record.WingOrdnance += ordnanceBefore - simulation.State.resources.ordnance;
-                    if (mission == SquadronMission.Recon) record.ReconSorties++;
-                    if (mission == SquadronMission.Intercept) record.InterceptSorties++;
-                    if (mission == SquadronMission.Bombard) record.BombardSorties++;
+                    // Legacy order is intentionally bomber first. All new modes share defense/recon/offense order.
+                    foreach (var type in order)
+                    foreach (var squadron in simulation.State.squadrons)
+                    {
+                        if (squadron.type != type || !policy.TryChoose(simulation.State, squadron, out var mission)) continue;
+                        var ordnanceBefore = simulation.State.resources.ordnance;
+                        var target = mission == SquadronMission.Intercept ? ShipSystemType.FlightDeck : ShipSystemType.Weapons;
+                        if (!simulation.LaunchSquadron(squadron.id, mission, target).success) continue;
+                        policy.RecordLaunch(squadron.id);
+                        record.Sorties++;
+                        record.WingOrdnance += ordnanceBefore - simulation.State.resources.ordnance;
+                        if (mission == SquadronMission.Recon) record.ReconSorties++;
+                        if (mission == SquadronMission.Intercept) record.InterceptSorties++;
+                        if (mission == SquadronMission.Bombard) record.BombardSorties++;
+                    }
                 }
+
+                if (!cautious && !overcharged && simulation.State.playerShip.instability < 55f)
+                {
+                    if (simulation.Overcharge(ShipSystemType.Weapons).success) overcharged = true;
+                }
+
+                AssignDamageControl(simulation);
+                if (simulation.State.convoy.supportCooldown <= 0 && simulation.State.playerShip.armor < simulation.State.playerShip.maxArmor * 0.5f)
+                    simulation.UseSupportAbility();
+
+                simulation.SetPaused(false);
+                simulation.Tick(0.1f);
+                elapsed += 0.1f;
+                completedTicks++;
+                if (simulation.State.resources.ordnance == 0) record.DryMagazineSeconds += 0.1f;
+                if (checkpoint?.TryCapture(simulation.State, profile, battle, completedTicks) == true) return elapsed;
             }
-
-            if (!cautious && !overcharged && simulation.State.playerShip.instability < 55f)
-            {
-                if (simulation.Overcharge(ShipSystemType.Weapons).success) overcharged = true;
-            }
-
-            AssignDamageControl(simulation);
-            if (simulation.State.convoy.supportCooldown <= 0 && simulation.State.playerShip.armor < simulation.State.playerShip.maxArmor * 0.5f)
-                simulation.UseSupportAbility();
-
-            simulation.SetPaused(false);
-            simulation.Tick(0.1f);
-            elapsed += 0.1f;
-            if (simulation.State.resources.ordnance == 0) record.DryMagazineSeconds += 0.1f;
+            return elapsed;
         }
-        simulation.LogAdded -= observer;
-        return elapsed;
+        finally { simulation.LogAdded -= observer; }
     }
 
     private static void AssignDamageControl(GameSimulation simulation)

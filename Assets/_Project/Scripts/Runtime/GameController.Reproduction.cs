@@ -16,6 +16,7 @@ namespace AetherArk.Runtime
         public string ReproductionSnapshotPath = string.Empty;
         public string ReproductionMessageKey { get; private set; } = "repro.help";
         public string ReproductionDetails { get; private set; } = string.Empty;
+        public AuditCheckpointMetadata ReproductionAudit { get; private set; }
         public bool CanCaptureSnapshot => Debug.isDebugBuild && Simulation?.State.phase == GamePhase.Combat;
         public bool CanStepReproduction => IsReproduction && Simulation?.State.phase == GamePhase.Combat && Simulation.State.isPaused;
 
@@ -93,6 +94,7 @@ namespace AetherArk.Runtime
                 payload.run.isPaused = true; // File remains immutable; loading never resumes a dangerous frame automatically.
                 ActivateReproduction(payload.profile, new GameSimulation(payload.run));
                 ReproductionMessageKey = differentBuild ? "repro.different_build" : "repro.loaded";
+                ReproductionAudit = payload.audit;
                 ReproductionDetails = Path.GetFileName(ReproductionSnapshotPath);
                 ReproductionPanelOpen = true; // Show result/version warning before letting the user resume.
                 RefreshCurrentScreen();
