@@ -33,9 +33,28 @@ namespace AetherArk.Core
     }
 
     [Serializable]
+    public sealed class AudioSettings
+    {
+        public float musicVolume = 0.5f;
+        public float effectsVolume = 0.7f;
+        public bool muted;
+
+        public void Normalize()
+        {
+            musicVolume = SafeVolume(musicVolume, 0.5f);
+            effectsVolume = SafeVolume(effectsVolume, 0.7f);
+        }
+
+        private static float SafeVolume(float value, float fallback)
+        {
+            return float.IsNaN(value) || float.IsInfinity(value) ? fallback : Math.Max(0f, Math.Min(1f, value));
+        }
+    }
+
+    [Serializable]
     public sealed class ProfileState
     {
-        public int schemaVersion = 1;
+        public int schemaVersion = 2;
         public Language language = Language.Korean;
         public Difficulty difficulty = Difficulty.Story;
         public string captainName = "아린";
@@ -45,6 +64,7 @@ namespace AetherArk.Core
         public int campaignVictories;
         public string flagshipId = "ship_vanguard";
         public AccessibilitySettings accessibility = new AccessibilitySettings();
+        public AudioSettings audio = new AudioSettings();
         public List<string> unlocks = new List<string> { "ship_vanguard", "squad_interceptor", "squad_bomber" };
     }
 

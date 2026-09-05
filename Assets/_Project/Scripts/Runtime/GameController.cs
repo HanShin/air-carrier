@@ -16,18 +16,22 @@ namespace AetherArk.Runtime
         public Texture2D Background => ResolveBackground();
         public FrontendScreen Screen { get; private set; }
         public string LastCommandMessage { get; private set; }
+        public GameAudio Audio { get; private set; }
+        public bool AudioSettingsOpen { get; private set; }
 
         private SaveService saves;
         private UiFactory ui;
         private GameView view;
         private GamePhase previousPhase;
         private float refreshTimer;
+        private bool resumeAfterAudioSettings;
         private readonly Dictionary<string, Texture2D> backgroundCache = new Dictionary<string, Texture2D>();
 
         private void Awake()
         {
             saves = new SaveService();
             Profile = saves.LoadProfile();
+            Audio = new GameAudio(transform, Profile.audio);
             L10n = new LocalizationService(Profile.language);
             LoadBackground(BackgroundArt.FallbackPath);
             ui = new UiFactory(Profile.accessibility.uiScale);
@@ -168,12 +172,12 @@ namespace AetherArk.Runtime
 
         private void Update()
         {
+            Audio.Observe(Simulation);
             if (HandleKeyboardShortcuts()) return;
             if (Simulation == null || Screen != FrontendScreen.Game) return;
             if (Simulation.State.phase == GamePhase.Combat && Input.GetKeyDown(GetPauseKey()))
             {
-                Simulation.TogglePause();
-                PersistAndRefresh();
+                TogglePause();
                 return;
             }
 
@@ -199,6 +203,12 @@ namespace AetherArk.Runtime
 
         private bool HandleKeyboardShortcuts()
         {
+            if (Input.GetKeyDown(KeyCode.F10)) { ToggleAudioSettings(); return true; }
+            if (AudioSettingsOpen)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape)) ToggleAudioSettings();
+                return true;
+            }
             if (Screen == FrontendScreen.Menu)
             {
                 if (Input.GetKeyDown(KeyCode.N)) { ShowSetup(); return true; }
@@ -284,16 +294,20 @@ namespace AetherArk.Runtime
 
         public void ShowMenu()
         {
+            AudioSettingsOpen = false;
             Screen = FrontendScreen.Menu;
             Simulation = null;
+            Audio.Observe(null);
             LastCommandMessage = string.Empty;
             view.ShowMenu(saves.HasRun());
         }
 
         public void ShowSetup()
         {
+            AudioSettingsOpen = false;
             Screen = FrontendScreen.Setup;
             Simulation = null;
+            Audio.Observe(null);
             LastCommandMessage = string.Empty;
             view.ShowSetup();
         }
@@ -307,6 +321,7 @@ namespace AetherArk.Runtime
                 ? unchecked((int)(DateTime.UtcNow.Ticks & 0x7FFFFFFF))
                 : GameSimulation.FirstExpeditionSeed;
             Simulation = GameSimulation.NewRun(Profile, seed);
+            Audio.Observe(Simulation);
             Screen = FrontendScreen.Game;
             previousPhase = Simulation.State.phase;
             saves.SaveRun(Simulation.State);
@@ -322,6 +337,7 @@ namespace AetherArk.Runtime
                 return;
             }
             Simulation = new GameSimulation(run);
+            Audio.Observe(Simulation);
             Screen = FrontendScreen.Game;
             previousPhase = run.phase;
             view.ShowGamePhase();
@@ -338,10 +354,68 @@ namespace AetherArk.Runtime
             Profile.language = Profile.language == Language.Korean ? Language.English : Language.Korean;
             L10n.Language = Profile.language;
             saves.SaveProfile(Profile);
+            RefreshCurrentScreen();
+        }
+
+        private void RefreshCurrentScreen()
+        {
+            if (AudioSettingsOpen) { view.ShowAudioSettings(); return; }
             if (Screen == FrontendScreen.Menu) view.ShowMenu(saves.HasRun());
             else if (Screen == FrontendScreen.Setup) view.ShowSetup();
             else view.ShowGamePhase();
         }
+
+        public void ToggleAudioSettings()
+        {
+            AudioSettingsOpen = !AudioSettingsOpen;
+            if (AudioSettingsOpen)
+            {
+                resumeAfterAudioSettings = Simulation != null && Simulation.State.phase == GamePhase.Combat && !Simulation.State.isPaused;
+                if (resumeAfterAudioSettings) Simulation.SetPaused(true);
+            }
+            else if (resumeAfterAudioSettings && Simulation != null && Simulation.State.phase == GamePhase.Combat)
+            {
+                Simulation.SetPaused(false);
+                resumeAfterAudioSettings = false;
+            }
+            RefreshCurrentScreen();
+        }
+
+        public void AdjustMusicVolume(float delta)
+        {
+            Profile.audio.musicVolume += delta;
+            SaveAudioSettings();
+        }
+
+        public void AdjustEffectsVolume(float delta)
+        {
+            Profile.audio.effectsVolume += delta;
+            SaveAudioSettings();
+            Audio.Play(SoundCue.Confirm);
+        }
+
+        public void ToggleAudioMute()
+        {
+            Profile.audio.muted = !Profile.audio.muted;
+            SaveAudioSettings();
+        }
+
+        public void PreviewAudio() => Audio.Play(SoundCue.Recover);
+
+        private void SaveAudioSettings()
+        {
+            Audio.ApplySettings(Profile.audio);
+            saves.SaveProfile(Profile);
+            RefreshCurrentScreen();
+        }
+
+        private void LateUpdate()
+        {
+            Audio.Observe(Simulation);
+            Audio.Tick(Time.unscaledDeltaTime, Simulation?.State, AudioSettingsOpen);
+        }
+
+        private void OnDestroy() => Audio?.Dispose();
 
         public void CycleLineage()
         {
@@ -415,12 +489,18 @@ namespace AetherArk.Runtime
             view.ShowSetup();
         }
 
-        public void Travel(string nodeId) => Apply(() => Simulation.TravelTo(nodeId));
+        public void Travel(string nodeId) => Apply(() => Simulation.TravelTo(nodeId), SoundCue.Confirm);
         public void PurchaseModule(string moduleId) => Apply(() => Simulation.PurchaseModule(moduleId));
-        public void DepartPort() => Apply(() => Simulation.DepartPort());
-        public void ChooseEncounter(string choiceId) => Apply(() => Simulation.ChooseEncounter(choiceId));
-        public void SkipEncounter() => Apply(() => Simulation.SkipEncounter());
-        public void TogglePause() { Simulation.TogglePause(); PersistAndRefresh(); }
+        public void DepartPort() => Apply(() => Simulation.DepartPort(), SoundCue.Confirm);
+        public void ChooseEncounter(string choiceId) => Apply(() => Simulation.ChooseEncounter(choiceId), SoundCue.Confirm);
+        public void SkipEncounter() => Apply(() => Simulation.SkipEncounter(), SoundCue.Confirm);
+        public void TogglePause()
+        {
+            if (Simulation == null || AudioSettingsOpen) return;
+            Simulation.TogglePause();
+            Audio.Play(Simulation.State.isPaused ? SoundCue.Pause : SoundCue.Resume);
+            PersistAndRefresh();
+        }
         public void ToggleCombatAutoPause()
         {
             if (Simulation == null) return;
@@ -429,7 +509,7 @@ namespace AetherArk.Runtime
             saves.SaveProfile(Profile);
             PersistAndRefresh();
         }
-        public void ChangePower(ShipSystemType type, int delta) => Apply(() => Simulation.Execute(new SetPowerCommand(type, delta)));
+        public void ChangePower(ShipSystemType type, int delta) => Apply(() => Simulation.Execute(new SetPowerCommand(type, delta)), SoundCue.Confirm);
         public void Fire(ShipSystemType target) => Apply(() => Simulation.Execute(new FireWeaponCommand(target)));
         public void FireSlot(int slot, ShipSystemType target) => Apply(() => Simulation.FireWeapon(slot, target));
         public void PurchaseWeapon(string weaponId) => Apply(() => Simulation.PurchaseWeapon(weaponId));
@@ -446,10 +526,13 @@ namespace AetherArk.Runtime
         public void EmergencyOrdnance() => Apply(() => Simulation.EmergencyOrdnanceAssembly());
         public void EmergencyAether() => Apply(() => Simulation.EmergencyAetherBurn());
 
-        private void Apply(Func<CommandResult> action)
+        private void Apply(Func<CommandResult> action, SoundCue? confirmation = null)
         {
-            if (Simulation == null) return;
+            if (Simulation == null || AudioSettingsOpen) return;
+            Audio.Observe(Simulation);
             var result = action();
+            if (!result.success) Audio.Play(SoundCue.Reject);
+            else if (confirmation.HasValue) Audio.Play(confirmation.Value);
             LastCommandMessage = result.messageKey;
             PersistAndRefresh();
         }

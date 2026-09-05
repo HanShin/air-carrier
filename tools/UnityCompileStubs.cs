@@ -24,6 +24,7 @@ namespace UnityEngine
 
     public class GameObject : Object
     {
+        public Transform transform => new Transform();
         public GameObject(string name, params Type[] components) { }
         public T AddComponent<T>() where T : Component, new() => new T();
         public T GetComponent<T>() where T : Component, new() => new T();
@@ -80,6 +81,18 @@ namespace UnityEngine
     }
 
     public class Texture : Object { }
+    public class AudioClip : Object { }
+    public static class AudioSettings { }
+    public class AudioListener : Behaviour { }
+    public class AudioSource : Behaviour
+    {
+        public bool playOnAwake, loop, mute;
+        public float spatialBlend, volume;
+        public int priority;
+        public AudioClip clip;
+        public void Play() { }
+        public void Stop() { }
+    }
     public enum TextureFormat { RGBA32 }
     public enum FilterMode { Point, Bilinear }
     public enum TextureWrapMode { Repeat, Clamp }
@@ -171,6 +184,7 @@ namespace UnityEngine
         S,
         R,
         M,
+        F10,
         Alpha1 = 49,
         Alpha2,
         Alpha3,

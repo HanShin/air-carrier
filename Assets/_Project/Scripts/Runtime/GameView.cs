@@ -62,7 +62,8 @@ namespace AetherArk.Runtime
                 new Vector2(60f, 114f), new Vector2(400f, 62f));
             ui.Button("Quit", panel, l10n.T("menu.quit"), controller.Quit,
                 new Vector2(60f, 32f), new Vector2(400f, 62f), new Color(0.22f, 0.13f, 0.16f, 0.95f));
-            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.9 · FLEET VISUALS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
+            AddAudioButton(ui.Root, new Vector2(1580f, 966f), new Vector2(280f, 54f));
+            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.10 · AETHER SOUNDS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
                 new Vector2(1420f, 28f), new Vector2(440f, 30f));
         }
 
@@ -72,6 +73,7 @@ namespace AetherArk.Runtime
             ui.Background(controller.Background, new Color(0.01f, 0.02f, 0.045f, 0.72f));
             ui.Text("SetupTitle", ui.Root, l10n.T("setup.title"), 46, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
                 new Vector2(190f, 955f), new Vector2(700f, 72f), FontStyle.Bold);
+            AddAudioButton(ui.Root, new Vector2(1460f, 966f), new Vector2(280f, 54f));
 
             var left = ui.PanelRect("IdentityPanel", ui.Root, new Vector2(180f, 170f), new Vector2(760f, 740f), PanelColor);
             ui.Text("CaptainLabel", left, l10n.T("setup.captain"), 20, UiFactory.Brass, TextAnchor.MiddleLeft,
@@ -144,6 +146,48 @@ namespace AetherArk.Runtime
             ui.Button(label + "Value", panel, value, action, new Vector2(440f, y), new Vector2(272f, 54f));
         }
 
+        private void AddAudioButton(Transform parent, Vector2 position, Vector2 size)
+        {
+            ui.Button("AudioSettings", parent, L("음향", "Audio") + " [F10]", controller.ToggleAudioSettings,
+                position, size, UiFactory.PanelSoft, controller.Profile.audio.muted ? UiFactory.TextMuted : UiFactory.Aether, 17);
+        }
+
+        public void ShowAudioSettings()
+        {
+            ui.Clear();
+            ui.Background(controller.Background, new Color(0.01f, 0.02f, 0.04f, 0.82f));
+            var panel = ui.PanelRect("AudioPanel", ui.Root, new Vector2(420f, 210f), new Vector2(1080f, 660f), PanelColor);
+            ui.Text("AudioTitle", panel, L("에테르의 소리", "SOUNDS OF THE AETHER"), 36, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(56f, 548f), new Vector2(960f, 64f), FontStyle.Bold);
+            ui.Text("AudioHint", panel, L("설정 중 전투는 멈춥니다. 닫으면 이전 일시정지 상태로 돌아갑니다.",
+                "Combat is held while settings are open. Closing restores the previous pause state."), 18, UiFactory.TextMuted,
+                TextAnchor.MiddleLeft, new Vector2(56f, 482f), new Vector2(960f, 58f));
+            AddVolumeRow(panel, "Music", L("배경 음악", "Music"), controller.Profile.audio.musicVolume, 396f, controller.AdjustMusicVolume);
+            AddVolumeRow(panel, "Effects", L("효과음·경고음", "Effects & alerts"), controller.Profile.audio.effectsVolume, 306f, controller.AdjustEffectsVolume);
+            ui.Button("AudioMute", panel, L("전체 음소거", "Mute all") + "  ·  " + On(controller.Profile.audio.muted), controller.ToggleAudioMute,
+                new Vector2(56f, 216f), new Vector2(600f, 58f), controller.Profile.audio.muted ? UiFactory.Violet : UiFactory.PanelSoft);
+            var preview = ui.Button("AudioPreview", panel, L("효과음 미리 듣기", "Preview effect"), controller.PreviewAudio,
+                new Vector2(690f, 216f), new Vector2(332f, 58f));
+            preview.interactable = !controller.Profile.audio.muted && controller.Profile.audio.effectsVolume > 0f;
+            ui.Text("AudioNote", panel, L("설정은 즉시 저장됩니다. 음악과 경고음은 시각적 알림을 보조하며 게임 속도와 독립적으로 재생됩니다.",
+                "Changes save immediately. Sound complements visible alerts and plays independently of combat speed."),
+                18, UiFactory.TextMuted, TextAnchor.UpperLeft, new Vector2(56f, 106f), new Vector2(960f, 78f));
+            ui.Button("AudioClose", panel, L("돌아가기", "Return") + "  [Esc / F10]", controller.ToggleAudioSettings,
+                new Vector2(690f, 34f), new Vector2(332f, 58f), UiFactory.Brass, UiFactory.Ink, 20);
+        }
+
+        private void AddVolumeRow(Transform panel, string id, string label, float volume, float y, Action<float> adjust)
+        {
+            ui.Text(id + "Label", panel, label, 24, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                new Vector2(56f, y), new Vector2(490f, 64f));
+            var decrease = ui.Button(id + "Down", panel, "−", () => adjust(-0.1f), new Vector2(620f, y), new Vector2(76f, 64f));
+            decrease.interactable = volume > 0.001f;
+            ui.Text(id + "Percent", panel, Mathf.RoundToInt(volume * 100f) + "%", 28, UiFactory.Aether, TextAnchor.MiddleCenter,
+                new Vector2(710f, y), new Vector2(210f, 64f), FontStyle.Bold);
+            var increase = ui.Button(id + "Up", panel, "+", () => adjust(0.1f), new Vector2(946f, y), new Vector2(76f, 64f));
+            increase.interactable = volume < 0.999f;
+        }
+
         public void ShowGamePhase()
         {
             if (controller.Simulation == null) return;
@@ -169,7 +213,8 @@ namespace AetherArk.Runtime
                 new Vector2(340f, 12f), new Vector2(620f, 66f));
             var convoy = $"{l10n.T("ui.survivors")} {state.convoy.survivors:N0}    {l10n.T("ui.morale")} {state.convoy.morale}%    {l10n.EnumName(state.convoy.supportShip)}";
             ui.Text("Convoy", bar, convoy, 19, UiFactory.Aether, TextAnchor.MiddleRight,
-                new Vector2(990f, 12f), new Vector2(760f, 66f), FontStyle.Bold);
+                new Vector2(970f, 12f), new Vector2(610f, 66f), FontStyle.Bold);
+            AddAudioButton(bar, new Vector2(1600f, 17f), new Vector2(138f, 56f));
             ui.Button("Menu", bar, l10n.T("ui.abandon"), controller.AbandonRun, new Vector2(1750f, 17f), new Vector2(140f, 56f),
                 new Color(0.32f, 0.09f, 0.12f, 0.95f), UiFactory.TextPrimary, 14);
         }
@@ -1152,6 +1197,7 @@ namespace AetherArk.Runtime
         {
             ui.Clear();
             ui.Background(controller.Background, victory ? new Color(0.02f, 0.08f, 0.09f, 0.56f) : new Color(0.08f, 0.01f, 0.04f, 0.72f));
+            AddAudioButton(ui.Root, new Vector2(1580f, 966f), new Vector2(280f, 54f));
             var state = controller.Simulation.State;
             var panel = ui.PanelRect("EndingPanel", ui.Root, new Vector2(410f, 230f), new Vector2(1100f, 620f), PanelColor);
             ui.Text("EndingTitle", panel, victory ? l10n.T("ui.victory_title") : l10n.T("ui.defeat_title"), 48,

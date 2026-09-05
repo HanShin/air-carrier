@@ -16,8 +16,13 @@ namespace AetherArk.Editor
         [MenuItem("Aether Ark/Write Save Fixtures")]
         public static void WriteSaveFixtures()
         {
-            var root = Path.GetFullPath("Assets/_Project/Tests/EditMode/Fixtures/v1");
+            var root = Path.GetFullPath("Assets/_Project/Tests/EditMode/Fixtures/v2");
             Directory.CreateDirectory(root);
+            if (File.Exists(Path.Combine(root, "profile.json")))
+            {
+                Debug.Log("Fixtures already exist; preserving the committed snapshot: " + root);
+                return;
+            }
             var service = new SaveService(root);
 
             var profile = new ProfileState
@@ -31,6 +36,9 @@ namespace AetherArk.Editor
             };
             profile.accessibility.combatSpeed = 1.25f;
             profile.accessibility.highContrast = true;
+            profile.audio.musicVolume = 0.3f;
+            profile.audio.effectsVolume = 0.8f;
+            profile.audio.muted = true;
 
             var run = GameSimulation.NewRun(profile, 424242).State;
             // A mid-campaign snapshot: second region, a few jumps in, resources spent, one downed crew member, a damaged room.

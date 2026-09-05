@@ -2,12 +2,13 @@ using System;
 using System.IO;
 using AetherArk.Core;
 using UnityEngine;
+using AudioSettings = AetherArk.Core.AudioSettings;
 
 namespace AetherArk.Runtime
 {
     public sealed class SaveService
     {
-        private const int CurrentProfileVersion = 1;
+        private const int CurrentProfileVersion = 2;
         private const int CurrentRunVersion = 1;
         private readonly string profilePath;
         private readonly string runPath;
@@ -49,6 +50,7 @@ namespace AetherArk.Runtime
         public void SaveProfile(ProfileState profile)
         {
             if (profile == null) return;
+            MigrateProfile(profile);
             profile.schemaVersion = CurrentProfileVersion;
             AtomicWrite(profilePath, JsonUtility.ToJson(profile, true));
         }
@@ -120,7 +122,10 @@ namespace AetherArk.Runtime
 
         private static ProfileState MigrateProfile(ProfileState profile)
         {
-            if (profile.schemaVersion < 1) profile.schemaVersion = 1;
+            // JsonUtility may leave absent nested fields null or zero-initialized. V1 had no audio settings.
+            if (profile.schemaVersion < 2 || profile.audio == null) profile.audio = new AudioSettings();
+            profile.audio.Normalize();
+            if (profile.schemaVersion < CurrentProfileVersion) profile.schemaVersion = CurrentProfileVersion;
             return profile;
         }
 

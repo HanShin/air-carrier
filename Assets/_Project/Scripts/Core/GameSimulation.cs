@@ -8,6 +8,9 @@ namespace AetherArk.Core
     {
         public const int FirstExpeditionSeed = 32838;
         public RunState State { get; private set; }
+        // Transient presentation notifications: never serialized or replayed when a save is loaded.
+        public event Action<CombatLogEntry> LogAdded;
+        public event Action<AlertSeverity> CombatAlertRaised;
 
         public GameSimulation(RunState state)
         {
@@ -1470,6 +1473,7 @@ namespace AetherArk.Core
             State.combatAlertSeconds = severity == AlertSeverity.Info ? 2.8f : 5f;
             State.combatAlertPausedBattle = canAutoPause && State.autoPauseOnWarning;
             if (State.combatAlertPausedBattle) State.isPaused = true;
+            CombatAlertRaised?.Invoke(severity);
         }
 
         private void ClearCombatAlert()
@@ -1483,8 +1487,10 @@ namespace AetherArk.Core
         private void AddLog(string key, string argument = "")
         {
             if (string.IsNullOrEmpty(key)) return;
-            State.combatLog.Add(new CombatLogEntry(key, argument));
+            var entry = new CombatLogEntry(key, argument);
+            State.combatLog.Add(entry);
             if (State.combatLog.Count > 8) State.combatLog.RemoveAt(0);
+            LogAdded?.Invoke(entry);
         }
 
         private static float Clamp(float value, float min, float max)

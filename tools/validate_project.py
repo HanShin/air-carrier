@@ -104,9 +104,19 @@ def validate_assets() -> None:
     missing_backgrounds = sorted(expected_backgrounds - present_backgrounds)
     if missing_backgrounds:
         fail("missing campaign backgrounds: " + ", ".join(missing_backgrounds))
+    expected_audio = {
+        "Music": {"voyage", "port", "encounter", "combat", "finale"},
+        "Effects": {"confirm", "reject", "cannon", "impact", "flyby", "launch", "recover", "resonance",
+                    "warning", "critical", "pause", "resume", "victory", "defeat"},
+    }
+    for folder, expected in expected_audio.items():
+        audio_folder = ROOT / "Assets/_Project/Resources/Audio" / folder
+        present_audio = {path.stem for path in audio_folder.glob("*.wav") if path.stat().st_size > 44}
+        if expected - present_audio:
+            fail(f"missing {folder.lower()} audio: " + ", ".join(sorted(expected - present_audio)))
     print(
         f"OK: required scene, settings, fallback background, {len(expected_backgrounds)} campaign/title backgrounds, "
-        f"{len(expected_silhouettes)} ship silhouettes, and 20 equipment icons"
+        f"{len(expected_silhouettes)} ship silhouettes, 20 equipment icons, and 19 audio clips"
     )
 
 

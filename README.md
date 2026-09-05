@@ -6,6 +6,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 
 ## What is implemented
 
+- Audio pass (0.10): five original synthesized music loops for voyage/menu, port, encounters, combat and the finale; fourteen effects for weapons, sorties, resonance, alerts and outcomes. Music crossfades and ducks while combat is paused. A persistent seven-source audio layer survives UI rebuilds without replaying cues or changing simulation RNG. Open **Audio / F10** on any screen for independent music/effects volume, mute and an effect preview. Settings hold combat and restore its prior pause state on close; profile v1 migrates to v2 while run saves remain v1. See `docs/AUDIO_IMPLEMENTATION.md` for source, validation and prototype limitations.
 - Fleet visual refresh (0.9): three dedicated flagship hull sprites, redesigned cutter/cruiser/warden art, a cinematic carrier title screen and a live flagship preview during setup. Cutaway rooms follow measured hull bounds with recessed metal surfaces and equipment details. Exterior/inside views and deck enlargement preserve all combat controls; selecting a crew member opens the enlarged player deck. See `docs/FLEET_VISUAL_REFRESH.md` for the asset paths, exact generation prompts and scope (2D art, not 3D meshes).
 - Combat UX pass: mouse-ready command bindings, disabled-state feedback, room integrity/power/hazard bars, layered defense meters, and threat countdowns.
 - FTL-style combat screen: both ships are drawn as top-down deck plans (`ShipBlueprintView`) from per-ship `DeckPlan` data. Rooms are coloured by condition, show power pips and integrity, and carry fire/breach/oxygen overlays; crew appear as lineage-coloured tokens inside rooms and as a portrait column on the left. A detail strip under each blueprint reports the selected room's condition, hazards and posted crew, and the air-wing bar uses FTL-style slot cards with strength pips and mission gauges. Clicking a room or token issues the same commands as before.
@@ -48,6 +49,7 @@ The repository now reaches the original plan's headline content counts—three f
 
 Keyboard access for the current slice:
 
+- All screens: `F10` audio settings; `Esc` / `F10` returns from audio settings without abandoning the run.
 - Menu: `N` new expedition, `C` continue, `L` language.
 - Setup: `Enter` launch, `Esc` back.
 - Route and encounters: `1`–`9` choose the numbered available option.
@@ -65,6 +67,7 @@ Default pause is `Space`; it can be changed to `P` during expedition setup. Save
 - Command-line Unity test: `Unity -batchmode -nographics -projectPath <repo> -runTests -testPlatform EditMode -testResults <results.xml>`.
 - macOS development build: execute `AetherArk.Editor.ProjectBuilder.BuildMac`; output is `Builds/AetherArk.app`.
 - Outside Unity: `python3 tools/validate_project.py` validates JSON, C# delimiter balance, localization coverage, and required assets.
+- Audio: `python3 tools/gen_audio.py --validate` checks WAV format, level, loop length and boundary continuity; `--check` regenerates in memory and checks byte-for-byte reproducibility. No external audio library or sample license is required.
 - With Mono installed: `bash tools/run_headless_audit.sh` compiles the real core C# sources and runs 100 seeded Standard/Story autoplayer campaigns plus the locked first expedition. Only the locked seed is treated as a first expedition, so the sweeps exercise the full roster. Add `--enemy=<id>` (for example `--enemy=enemy_monitor`) to force one silhouette into every battle; a battle that neither side can finish within the time cap is reported as a STALEMATE and exits with code 3, now with a compact combat-state snapshot. `--report` prints a balance report (survival funnel per region, loss reasons, per-enemy and per-region battle stats, resources entering each region) and `--strategy=cautious` plays without wings or overcharge as a lower bound. Current Dawn Refuge autoplayer campaign win rates after crew progression and recruitment are Standard 39% / Story 66% / Harsh 19%. Iron Bastion Standard was last measured at 32% and Zephyr Kite Standard at 6% (a known problem: the autoplayer cannot exploit its wings and its light hull folds in regions 4–6). The locked seed wins; the cautious profile wins almost nothing, so interceptors and escorts are not optional against strikes.
 - `bash tools/compile_all_csharp.sh` compiles the complete runtime/UI source against compile-only Unity API stubs, catching C# and project-layer linkage errors before an editor import.
 
