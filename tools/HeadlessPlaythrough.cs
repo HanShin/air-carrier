@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using AetherArk.Content;
 using AetherArk.Core;
 
@@ -21,6 +23,9 @@ internal static class HeadlessPlaythrough
         public string StalemateEnemy;
         public string StalemateState;
         public int RegionReached = 1;
+        public int Sorties, WingOrdnance, AirframesLost, WingsDestroyed, UnopposedRaids, PilotDeaths;
+        public int ReconSorties, InterceptSorties, BombardSorties;
+        public float DryMagazineSeconds;
         public List<BattleRecord> BattleRecords = new List<BattleRecord>();
         public List<string> GateSnapshots = new List<string>();
     }
@@ -33,32 +38,59 @@ internal static class HeadlessPlaythrough
         public bool Won;
         public float HullLost;
         public bool Final;
+        public int Sorties, WingOrdnance, AirframesLost, WingsDestroyed, UnopposedRaids;
+        public int ReconSorties, InterceptSorties, BombardSorties;
+        public float DryMagazineSeconds;
     }
 
     private static string forcedEnemy;
     private static string strategy = "standard";
     private static string flagship;
     private static bool report;
+    private static bool records;
+    private static bool tutorial;
+    private static string wingPolicy = "legacy";
+    private static float combatTimeCap = 420f;
 
     private static int Main(string[] args)
     {
-        var runCount = args.Length > 0 ? int.Parse(args[0]) : 100;
-        var difficulty = args.Length > 1 ? (Difficulty)Enum.Parse(typeof(Difficulty), args[1], true) : Difficulty.Standard;
-        var baseSeed = args.Length > 2 ? int.Parse(args[2]) : 17000;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        if (Array.IndexOf(args, "--self-test") >= 0) return AuditWingPolicyTests.Run();
+        tutorial = Array.IndexOf(args, "--tutorial") >= 0;
+        var positional = new List<string>();
+        foreach (var arg in args) if (!arg.StartsWith("--", StringComparison.Ordinal)) positional.Add(arg);
+        var runCount = positional.Count > 0 ? int.Parse(positional[0]) : tutorial ? 1 : 100;
+        var difficulty = positional.Count > 1 ? (Difficulty)Enum.Parse(typeof(Difficulty), positional[1], true) : tutorial ? Difficulty.Story : Difficulty.Standard;
+        var baseSeed = positional.Count > 2 ? int.Parse(positional[2]) : tutorial ? GameSimulation.FirstExpeditionSeed : 17000;
+        if (runCount < 1 || runCount > 10000 || positional.Count > 3 || !Enum.IsDefined(typeof(Difficulty), difficulty))
+            throw new ArgumentException("Usage: [1..10000 runs] [Story|Standard|Harsh] [base seed] [options]");
         foreach (var arg in args)
         {
             if (arg.StartsWith("--enemy=", StringComparison.Ordinal)) forcedEnemy = arg.Substring("--enemy=".Length);
             if (arg.StartsWith("--strategy=", StringComparison.Ordinal)) strategy = arg.Substring("--strategy=".Length).ToLowerInvariant();
             if (arg == "--report") report = true;
+            if (arg == "--records") records = true;
+            if (arg.StartsWith("--wings=", StringComparison.Ordinal)) wingPolicy = arg.Substring("--wings=".Length);
+            if (arg.StartsWith("--combat-cap=", StringComparison.Ordinal)) combatTimeCap = float.Parse(arg.Substring("--combat-cap=".Length));
             if (arg.StartsWith("--flagship=", StringComparison.Ordinal)) flagship = arg.Substring("--flagship=".Length);
+            if (arg.StartsWith("--", StringComparison.Ordinal) && arg != "--report" && arg != "--records" && arg != "--tutorial"
+                && !arg.StartsWith("--enemy=") && !arg.StartsWith("--strategy=") && !arg.StartsWith("--flagship=") && !arg.StartsWith("--wings=") && !arg.StartsWith("--combat-cap="))
+                throw new ArgumentException("Unknown option: " + arg);
         }
+        if (strategy != "standard" && strategy != "cautious") throw new ArgumentException("Unknown strategy: " + strategy);
+        if (Array.IndexOf(AuditWingPolicy.Modes, wingPolicy) < 0) throw new ArgumentException("Unknown wing policy: " + wingPolicy);
+        if (float.IsNaN(combatTimeCap) || combatTimeCap < 0.1f || combatTimeCap > 3600f) throw new ArgumentException("Combat cap must be 0.1..3600 seconds.");
+        if (flagship != null && ContentCatalog.GetFlagship(flagship) == null) throw new ArgumentException("Unknown flagship: " + flagship);
+        if (tutorial && (runCount != 1 || baseSeed != GameSimulation.FirstExpeditionSeed || (flagship != null && flagship != "ship_vanguard")))
+            throw new ArgumentException("Tutorial audit requires one run, seed 32838 and the Dawn Refuge.");
         var results = new List<Result>();
         for (var i = 0; i < runCount; i++) results.Add(Play(baseSeed + i * 7919, difficulty));
+        if (records) foreach (var result in results) PrintRecord(result);
 
         var stalemates = results.FindAll(result => result.Stalemate);
         if (stalemates.Count > 0)
         {
-            Console.Error.WriteLine($"STALEMATE in {stalemates.Count} run(s): a battle neither side could finish within the combat time cap.");
+            Console.Error.WriteLine($"COMBAT TIMEOUT in {stalemates.Count} run(s) at {combatTimeCap:0.0}s: inconclusive, not a defeat or proof of a permanent stalemate.");
             foreach (var result in stalemates) Console.Error.WriteLine($"  seed={result.Seed} enemy={result.StalemateEnemy} battles={result.Battles} {result.StalemateState}");
             return 3;
         }
@@ -89,8 +121,9 @@ internal static class HeadlessPlaythrough
             maxBattles = Math.Max(maxBattles, result.Battles);
         }
 
-        Console.WriteLine("Headless first-run audit");
+        Console.WriteLine(tutorial ? "Headless tutorial audit" : "Headless campaign audit");
         Console.WriteLine($"Difficulty: {difficulty}");
+        Console.WriteLine($"Wing policy: {wingPolicy}; strategy: {strategy}; tutorial: {tutorial}");
         if (forcedEnemy != null) Console.WriteLine($"Forced enemy: {forcedEnemy}");
         if (flagship != null) Console.WriteLine($"Flagship: {flagship}");
         Console.WriteLine($"Runs: {results.Count}");
@@ -98,7 +131,7 @@ internal static class HeadlessPlaythrough
         Console.WriteLine($"Full-length completions (7 jumps x regions): {victories.FindAll(result => result.Jumps == 7 * result.Regions).Count}/{victories.Count}");
         Console.WriteLine($"Battles per victory: {minBattles}–{maxBattles}");
         Console.WriteLine($"Average active combat simulation: {combatSeconds / victories.Count / 60f:0.0} min");
-        Console.WriteLine($"Estimated human first-run duration: {estimatedHumanMinutes / victories.Count:0.0} min");
+        Console.WriteLine($"Estimated human duration (not playtested): {estimatedHumanMinutes / victories.Count:0.0} min");
         Console.WriteLine("Human playtime target adds pause/targeting, event reading, route planning, setup, and repair decisions.");
 
         var printedLosses = 0;
@@ -112,10 +145,23 @@ internal static class HeadlessPlaythrough
         return victories.Count >= Math.Max(1, runCount / 4) ? 0 : 2;
     }
 
+    private static void PrintRecord(Result r)
+    {
+        Console.WriteLine($"RUN seed={r.Seed} victory={(r.Victory ? 1 : 0)} stalemate={(r.Stalemate ? 1 : 0)} regions={r.Regions} reached={r.RegionReached} " +
+            $"jumps={r.Jumps} battles={r.Battles} seconds={r.ActiveCombatSeconds:0.0} sorties={r.Sorties} wing_ordnance={r.WingOrdnance} " +
+            $"airframes_lost={r.AirframesLost} wings_destroyed={r.WingsDestroyed} raids={r.UnopposedRaids} pilot_deaths={r.PilotDeaths} " +
+            $"recon={r.ReconSorties} intercept={r.InterceptSorties} bombard={r.BombardSorties} dry_seconds={r.DryMagazineSeconds:0.0}");
+    }
+
     private static void PrintReport(List<Result> results)
     {
         Console.WriteLine();
         Console.WriteLine($"=== Balance report (strategy: {strategy}) ===");
+        var battles = Math.Max(1, results.Sum(r => r.Battles));
+        Console.WriteLine($"Wing telemetry ({wingPolicy}), per battle: sorties {results.Sum(r => r.Sorties) / (float)battles:0.00}, " +
+            $"ordnance {results.Sum(r => r.WingOrdnance) / (float)battles:0.00}, airframes lost {results.Sum(r => r.AirframesLost) / (float)battles:0.00}, " +
+            $"unopposed raids {results.Sum(r => r.UnopposedRaids) / (float)battles:0.00}");
+        Console.WriteLine($"Pilot deaths: {results.Sum(r => r.PilotDeaths)}; destroyed wings: {results.Sum(r => r.WingsDestroyed)}; recon sorties: {results.Sum(r => r.ReconSorties)}");
         var regions = 0;
         foreach (var result in results) regions = Math.Max(regions, result.Regions);
 
@@ -191,7 +237,7 @@ internal static class HeadlessPlaythrough
             captainLineage = CrewLineage.Human,
             difficulty = difficulty,
             supportShip = SupportShipType.Workshop,
-            tutorialSeen = seed != GameSimulation.FirstExpeditionSeed,
+            tutorialSeen = !tutorial,
             campaignVictories = flagship != null ? 1 : 0,
             flagshipId = flagship ?? "ship_vanguard"
         };
@@ -222,11 +268,20 @@ internal static class HeadlessPlaythrough
                     };
                     var hullBefore = simulation.State.playerShip.hull;
                     var regionBefore = simulation.State.regionIndex;
-                    record.Seconds = ResolveCombat(simulation);
+                    record.Seconds = ResolveCombat(simulation, record);
                     record.Won = simulation.State.phase != GamePhase.Defeat && simulation.State.phase != GamePhase.Combat;
                     record.HullLost = Math.Max(0f, hullBefore - simulation.State.playerShip.hull);
                     result.ActiveCombatSeconds += record.Seconds;
                     result.BattleRecords.Add(record);
+                    result.Sorties += record.Sorties;
+                    result.WingOrdnance += record.WingOrdnance;
+                    result.AirframesLost += record.AirframesLost;
+                    result.WingsDestroyed += record.WingsDestroyed;
+                    result.UnopposedRaids += record.UnopposedRaids;
+                    result.ReconSorties += record.ReconSorties;
+                    result.InterceptSorties += record.InterceptSorties;
+                    result.BombardSorties += record.BombardSorties;
+                    result.DryMagazineSeconds += record.DryMagazineSeconds;
                     if (simulation.State.regionIndex > regionBefore)
                     {
                         var r = simulation.State.resources; var ship = simulation.State.playerShip;
@@ -234,13 +289,13 @@ internal static class HeadlessPlaythrough
                     }
                     if (simulation.State.phase == GamePhase.Combat)
                     {
-                        // The time cap expired with both ships alive: a stalemate is a design defect, not a loss.
+                        // Both ships are still alive at the audit cap: retain an inconclusive result, never a loss.
                         result.Stalemate = true;
                         result.StalemateEnemy = simulation.State.enemyShip?.id;
                         var player = simulation.State.playerShip;
                         var enemy = simulation.State.enemyShip;
                         result.StalemateState = $"player={player.hull:0.0}/{player.maxHull:0.0} ward={player.ward:0.0} weapons={player.GetSystem(ShipSystemType.Weapons)?.damage:0.0} power={player.GetSystem(ShipSystemType.Weapons)?.EffectivePower} " +
-                            $"enemy={enemy?.hull:0.0}/{enemy?.maxHull:0.0} ward={enemy?.ward:0.0} weapons={enemy?.GetSystem(ShipSystemType.Weapons)?.damage:0.0} " +
+                            $"enemy={enemy?.hull:0.0}/{enemy?.maxHull:0.0} armor={enemy?.armor:0.0} ward={enemy?.ward:0.0} weapons={enemy?.GetSystem(ShipSystemType.Weapons)?.damage:0.0} " +
                             $"activeCrew={simulation.State.crew.FindAll(crew => crew.IsActive).Count} ordnance={simulation.State.resources.ordnance} slots={simulation.State.weaponSlots.Count} " +
                             $"slot0={(simulation.State.weaponSlots.Count > 0 ? simulation.State.weaponSlots[0].weaponId : "none")} cd0={(simulation.State.weaponSlots.Count > 0 ? simulation.State.weaponSlots[0].cooldown : 0f):0.0}";
                         goto done;
@@ -257,6 +312,7 @@ internal static class HeadlessPlaythrough
         result.RegionReached = simulation.State.regionIndex;
         result.Survivors = simulation.State.convoy.survivors;
         result.Morale = simulation.State.convoy.morale;
+        result.PilotDeaths = simulation.State.crew.FindAll(crew => crew.isDead && simulation.State.squadrons.Exists(wing => wing.pilotCrewId == crew.id)).Count;
         return result;
     }
 
@@ -416,12 +472,18 @@ internal static class HeadlessPlaythrough
         return score;
     }
 
-    private static float ResolveCombat(GameSimulation simulation)
+    private static float ResolveCombat(GameSimulation simulation, BattleRecord record)
     {
         var elapsed = 0f;
         var overcharged = false;
-        var launchedBomber = false;
-        var launchedInterceptor = false;
+        var policy = new AuditWingPolicy(wingPolicy);
+        Action<CombatLogEntry> observer = entry =>
+        {
+            if (entry.key == "log.squadron_damaged") record.AirframesLost++;
+            if (entry.key == "log.squadron_destroyed") record.WingsDestroyed++;
+            if (entry.key == "log.enemy_squadron_hit" || entry.key == "log.boarders") record.UnopposedRaids++;
+        };
+        simulation.LogAdded += observer;
         var resonator = simulation.State.crew.Find(crew => crew.role == CrewRole.Resonator);
         if (resonator != null) simulation.MoveCrew(resonator.id, ShipSystemType.Weapons);
         // Route spare core output into the weapons room so every mounted weapon can be powered.
@@ -430,23 +492,32 @@ internal static class HeadlessPlaythrough
         // Spare power beyond the mounted weapons still shortens every reload, so route all of it.
         while (weaponsSystem != null && weaponsSystem.power < weaponsSystem.maxPower && ship.AllocatedPower() < ship.coreOutput)
             simulation.ChangePower(ShipSystemType.Weapons, 1);
+        var order = wingPolicy == "legacy"
+            ? new[] { SquadronType.Bomber, SquadronType.Interceptor }
+            : new[] { SquadronType.Interceptor, SquadronType.Escort, SquadronType.Recon, SquadronType.Bomber, SquadronType.Assault };
 
-        while (simulation.State.phase == GamePhase.Combat && elapsed < 420f)
+        while (simulation.State.phase == GamePhase.Combat && elapsed < combatTimeCap)
         {
             simulation.FireAllReady(ShipSystemType.Weapons);
 
             var cautious = strategy == "cautious";
-            // One sortie per wing per battle: relaunching every time bleeds strength, pilots and ordnance.
-            var bomber = simulation.State.squadrons.Find(squadron => squadron.type == SquadronType.Bomber);
-            if (!cautious && !launchedBomber && bomber != null && bomber.CanLaunch && simulation.State.resources.ordnance >= bomber.ordnanceCost)
+            if (!cautious)
             {
-                if (simulation.LaunchSquadron(bomber.id, SquadronMission.Bombard, ShipSystemType.Weapons).success) launchedBomber = true;
-            }
-
-            var interceptor = simulation.State.squadrons.Find(squadron => squadron.type == SquadronType.Interceptor);
-            if (!cautious && !launchedInterceptor && interceptor != null && interceptor.CanLaunch && simulation.State.resources.ordnance >= interceptor.ordnanceCost)
-            {
-                if (simulation.LaunchSquadron(interceptor.id, SquadronMission.Intercept, ShipSystemType.FlightDeck).success) launchedInterceptor = true;
+                // Legacy order is intentionally bomber first. All new modes share defense/recon/offense order.
+                foreach (var type in order)
+                foreach (var squadron in simulation.State.squadrons)
+                {
+                    if (squadron.type != type || !policy.TryChoose(simulation.State, squadron, out var mission)) continue;
+                    var ordnanceBefore = simulation.State.resources.ordnance;
+                    var target = mission == SquadronMission.Intercept ? ShipSystemType.FlightDeck : ShipSystemType.Weapons;
+                    if (!simulation.LaunchSquadron(squadron.id, mission, target).success) continue;
+                    policy.RecordLaunch(squadron.id);
+                    record.Sorties++;
+                    record.WingOrdnance += ordnanceBefore - simulation.State.resources.ordnance;
+                    if (mission == SquadronMission.Recon) record.ReconSorties++;
+                    if (mission == SquadronMission.Intercept) record.InterceptSorties++;
+                    if (mission == SquadronMission.Bombard) record.BombardSorties++;
+                }
             }
 
             if (!cautious && !overcharged && simulation.State.playerShip.instability < 55f)
@@ -461,7 +532,9 @@ internal static class HeadlessPlaythrough
             simulation.SetPaused(false);
             simulation.Tick(0.1f);
             elapsed += 0.1f;
+            if (simulation.State.resources.ordnance == 0) record.DryMagazineSeconds += 0.1f;
         }
+        simulation.LogAdded -= observer;
         return elapsed;
     }
 
