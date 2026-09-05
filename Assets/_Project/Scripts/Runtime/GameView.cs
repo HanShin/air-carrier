@@ -22,6 +22,7 @@ namespace AetherArk.Runtime
         private bool showEnemyExterior;
         private bool enlargePlayerDeck;
         private bool enlargeEnemyDeck;
+        private RectTransform squadronPanel;
 
         private Color PanelColor => controller.Profile.accessibility.highContrast ? new Color(0.01f, 0.02f, 0.035f, 0.99f) : UiFactory.Panel;
 
@@ -729,6 +730,7 @@ namespace AetherArk.Runtime
             AddStatusBar();
             var state = controller.Simulation.State;
 
+            selectedEnemySystem = state.selectedEnemySystem;
             var battleStrip = ui.PanelRect("BattleStrip", ui.Root, new Vector2(20f, 924f), new Vector2(1880f, 56f), new Color(0.025f, 0.045f, 0.08f, 0.96f));
             var status = state.isPaused ? l10n.T("ui.pause") : l10n.T("ui.running");
             ui.Text("BattleStatus", battleStrip, status, 22, state.isPaused ? UiFactory.Brass : UiFactory.Success, TextAnchor.MiddleLeft,
@@ -986,26 +988,33 @@ namespace AetherArk.Runtime
         {
             var state = controller.Simulation.State;
             var panel = ui.PanelRect("SquadronPanel", ui.Root, new Vector2(20f, 20f), new Vector2(1880f, 232f), PanelColor);
+            squadronPanel = panel;
+            FitSquadronPanel();
             ui.Text("SquadronTitle", panel, l10n.T("ui.squadrons"), 18, UiFactory.Brass, TextAnchor.MiddleLeft,
                 new Vector2(18f, 190f), new Vector2(300f, 32f), FontStyle.Bold);
             ui.Icon("InterceptSummaryIcon", panel, GameIconLibrary.Wing(SquadronType.Interceptor), new Vector2(1412f, 191f), new Vector2(30f, 30f));
             ui.Text("InterceptCount", panel, $"{l10n.T("ui.intercept")} {state.interceptCharges}   ·   {l10n.T("ui.ordnance")} {state.resources.ordnance}", 15, UiFactory.Aether, TextAnchor.MiddleRight,
                 new Vector2(1448f, 190f), new Vector2(412f, 32f), FontStyle.Bold);
-            var tutorialHint = CombatTutorialHint(state);
-            if (!string.IsNullOrEmpty(tutorialHint))
+            var deck = state.playerShip.GetSystem(ShipSystemType.FlightDeck);
+            var deckReady = deck != null && deck.EffectivePower > 0;
+            var panelHint = deckReady ? CombatTutorialHint(state) : L("비행갑판 전력 없음 — 발진 불가", "Flight deck unpowered — launches blocked");
+            if (!string.IsNullOrEmpty(panelHint))
             {
-                ui.Text("TutorialHint", panel, tutorialHint, 15, UiFactory.Aether, TextAnchor.MiddleCenter,
+                ui.Text(deckReady ? "TutorialHint" : "DeckWarning", panel, panelHint, 15, deckReady ? UiFactory.Aether : UiFactory.Danger, TextAnchor.MiddleCenter,
                     new Vector2(340f, 190f), new Vector2(1040f, 32f), FontStyle.Bold);
             }
 
-            var deck = state.playerShip.GetSystem(ShipSystemType.FlightDeck);
-            var deckReady = deck != null && deck.EffectivePower > 0;
             var missions = new[] { SquadronMission.Intercept, SquadronMission.Bombard, SquadronMission.Escort, SquadronMission.Recon, SquadronMission.Assault };
             var keys = new[] { "ui.intercept", "ui.bombard", "ui.escort", "ui.recon", "ui.assault" };
-            for (var i = 0; i < state.squadrons.Count && i < 2; i++)
+            // Two bays retain the original rows. Larger complements share the same footprint as side-by-side cards.
+            var compact = state.squadrons.Count > 2;
+            var cardWidth = compact ? (1844f - (state.squadrons.Count - 1) * 12f) / state.squadrons.Count : 340f;
+            var cardHeight = compact ? 164f : 76f;
+            for (var i = 0; i < state.squadrons.Count; i++)
             {
                 var squadron = state.squadrons[i];
-                var y = 104f - i * 86f;
+                var x = compact ? 18f + i * (cardWidth + 12f) : 18f;
+                var y = compact ? 18f : 104f - i * 86f;
                 var destroyed = squadron.status == SquadronStatus.Destroyed;
                 var busy = squadron.status == SquadronStatus.Launching || squadron.status == SquadronStatus.OnMission || squadron.status == SquadronStatus.Recovering;
                 var readiness = controller.Simulation.CheckSquadronLaunch(squadron.id, SquadronMission.Intercept, selectedEnemySystem);
@@ -1015,60 +1024,81 @@ namespace AetherArk.Runtime
 
                 // Slot card: role icon, name, status line, strength pips, ordnance cost.
                 var cardColor = destroyed || launchBlocked ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : busy ? new Color(0.09f, 0.2f, 0.28f, 0.95f) : UiFactory.PanelSoft;
-                var card = ui.PanelRect("SquadCard_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), cardColor);
+                var card = ui.PanelRect("SquadCard_" + squadron.id, panel, new Vector2(x, y), new Vector2(cardWidth, cardHeight), cardColor);
                 card.GetComponent<Image>().raycastTarget = false;
-                ui.Outline("SquadCardEdge_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), 1f,
+                ui.Outline("SquadCardEdge_" + squadron.id, panel, new Vector2(x, y), new Vector2(cardWidth, cardHeight), 1f,
                     destroyed || launchBlocked ? UiFactory.Danger : busy ? UiFactory.Aether : new Color(0.3f, 0.36f, 0.42f, 0.9f));
                 var wing = ContentCatalog.GetWing(squadron.wingId);
                 var squadronType = wing != null ? wing.type : squadron.type;
-                ui.Icon("SquadIcon_" + squadron.id, card, GameIconLibrary.Wing(squadronType), new Vector2(6f, 14f), new Vector2(48f, 48f),
+                ui.Icon("SquadIcon_" + squadron.id, card, GameIconLibrary.Wing(squadronType), new Vector2(6f, compact ? 108f : 14f), new Vector2(48f, 48f),
                     destroyed ? new Color(0.55f, 0.25f, 0.25f, 1f) : Color.white);
-                ui.Text("SquadName_" + squadron.id, card, l10n.T(squadron.displayKey), 15, destroyed ? UiFactory.Danger : UiFactory.TextPrimary, TextAnchor.MiddleLeft,
-                    new Vector2(58f, 44f), new Vector2(200f, 26f), FontStyle.Bold);
+                ui.Text("SquadName_" + squadron.id, card, l10n.T(squadron.displayKey), compact ? 17 : 15, destroyed ? UiFactory.Danger : UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                    new Vector2(58f, compact ? 132f : 44f), new Vector2(compact ? cardWidth - 158f : 192f, 26f), FontStyle.Bold);
                 var strengthPips = new StringBuilder();
                 for (var p = 0; p < squadron.maxStrength; p++) strengthPips.Append(p < squadron.strength ? '●' : '○');
                 ui.Text("SquadStrength_" + squadron.id, card, strengthPips.ToString(), 13, squadron.strength <= 1 ? UiFactory.Danger : UiFactory.Aether, TextAnchor.MiddleRight,
-                    new Vector2(250f, 44f), new Vector2(84f, 26f), FontStyle.Bold);
+                    new Vector2(cardWidth - 90f, compact ? 132f : 44f), new Vector2(84f, 26f), FontStyle.Bold);
                 var statusLine = l10n.EnumName(squadron.status);
                 if (squadron.mission != SquadronMission.None && busy) statusLine += " · " + l10n.EnumName(squadron.mission);
                 if ((squadron.mission == SquadronMission.Bombard || squadron.mission == SquadronMission.Assault) && busy)
                     statusLine += " → " + l10n.T(state.enemyShip.GetSystem(squadron.targetSystem).displayKey);
                 if (launchBlocked) statusLine = l10n.T(readiness.messageKey);
-                ui.Text("SquadStatus_" + squadron.id, card, statusLine, 12, launchBlocked ? UiFactory.Danger : busy ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.MiddleLeft,
-                    new Vector2(58f, 20f), new Vector2(276f, 22f));
+                ui.Text("SquadStatus_" + squadron.id, card, statusLine, compact ? 13 : 12, launchBlocked ? UiFactory.Danger : busy ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                    new Vector2(58f, compact ? 110f : 20f), new Vector2(cardWidth - 64f, 22f));
                 var recruit = pilot == null ? null : CrewLibrary.Get(pilot.id);
                 var pilotName = pilot == null ? "—" : recruit == null ? pilot.displayName : l10n.T(recruit.nameKey);
-                ui.Text("SquadCost_" + squadron.id, card, $"{l10n.T("ui.pilot")} {pilotName}  ·  {l10n.T("ui.ordnance")} {launchCost}", 11,
+                ui.Text("SquadCost_" + squadron.id, card, $"{l10n.T("ui.pilot")} {pilotName}  ·  {l10n.T("ui.ordnance")} {launchCost}", compact ? 13 : 11,
                     state.resources.ordnance >= launchCost ? UiFactory.TextMuted : UiFactory.Danger, TextAnchor.MiddleLeft,
-                    new Vector2(58f, 4f), new Vector2(276f, 18f));
+                    new Vector2(compact ? 14f : 58f, compact ? 86f : 4f), new Vector2(cardWidth - (compact ? 28f : 64f), 18f));
 
                 // Mission gauge across the card bottom.
                 var progress = squadron.status == SquadronStatus.Ready ? 1f : destroyed ? 0f :
                     squadron.phaseDuration <= 0f ? 0f : 1f - squadron.missionTimer / squadron.phaseDuration;
                 var progressColor = squadron.status == SquadronStatus.Recovering ? UiFactory.Success : destroyed ? UiFactory.Danger : UiFactory.Aether;
-                ui.Bar("SquadProgress_" + squadron.id, panel, progress, new Vector2(18f, y - 4f), new Vector2(340f, 4f), progressColor);
+                ui.Bar("SquadProgress_" + squadron.id, panel, progress, new Vector2(x + (compact ? 12f : 0f), y + (compact ? 80f : -4f)),
+                    new Vector2(cardWidth - (compact ? 24f : 0f), 6f), progressColor); // Bar insets consume 4 px; leave visible fill height.
 
                 // Mission slots.
                 for (var m = 0; m < missions.Length; m++)
                 {
                     var mission = missions[m];
                     var localSquad = squadron.id;
-                    var shortcut = mission == SquadronMission.Bombard && i < 2 ? $"[{i + 1}] " : string.Empty;
-                    var label = $"{shortcut}{l10n.T(keys[m])}";
+                    var shortcut = mission == SquadronShortcuts.MissionFor(i, squadron) ? $"[{i + 1}] " : string.Empty;
+                    var label = (compact ? string.Empty : shortcut) + l10n.T(keys[m]);
                     var color = mission == SquadronMission.Bombard ? new Color(0.43f, 0.18f, 0.11f, 0.98f)
                         : mission == SquadronMission.Assault ? new Color(0.36f, 0.14f, 0.3f, 0.98f)
                         : mission == SquadronMission.Intercept || mission == SquadronMission.Escort ? new Color(0.09f, 0.24f, 0.3f, 0.98f)
                         : UiFactory.PanelSoft;
+                    var buttonWidth = compact ? (cardWidth - 56f) / 5f : 284f;
+                    var buttonX = compact ? x + 12f + m * (buttonWidth + 8f) : 376f + m * 298f;
+                    var buttonY = y + (compact ? 10f : 8f);
                     var button = ui.Button($"{squadron.id}_{mission}", panel, label, () => controller.LaunchSquadron(localSquad, mission, selectedEnemySystem),
-                        new Vector2(376f + m * 298f, y + 8f), new Vector2(284f, 60f), color, UiFactory.TextPrimary, 16);
+                        new Vector2(buttonX, buttonY), new Vector2(buttonWidth, compact ? 62f : 60f), color, UiFactory.TextPrimary, compact ? 14 : 16);
                     button.interactable = controller.Simulation.CheckSquadronLaunch(squadron.id, mission, selectedEnemySystem).success;
+                    if (compact)
+                    {
+                        var text = button.GetComponentInChildren<Text>();
+                        text.rectTransform.anchoredPosition = new Vector2(4f, 4f);
+                        text.rectTransform.sizeDelta = new Vector2(buttonWidth - 8f, 24f);
+                        if (shortcut.Length > 0)
+                            ui.Text($"MissionShortcut_{squadron.id}_{mission}", button.transform, shortcut.Trim(), 13, UiFactory.Brass, TextAnchor.MiddleLeft,
+                                new Vector2(6f, 34f), new Vector2(30f, 24f), FontStyle.Bold);
+                    }
                     ui.Icon($"MissionIcon_{squadron.id}_{mission}", panel, GameIconLibrary.Mission(mission),
-                        new Vector2(386f + m * 298f, y + 20f), new Vector2(36f, 36f), button.interactable ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f));
+                        new Vector2(compact ? buttonX + buttonWidth - 32f : buttonX + 10f, buttonY + (compact ? 32f : 12f)),
+                        compact ? new Vector2(24f, 24f) : new Vector2(36f, 36f), button.interactable ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f));
                 }
             }
-            if (!deckReady)
-                ui.Text("DeckWarning", panel, L("비행갑판 전력 없음 — 발진 불가", "Flight deck unpowered — launches blocked"), 13, UiFactory.Danger, TextAnchor.MiddleLeft,
-                    new Vector2(376f, 190f), new Vector2(600f, 32f), FontStyle.Bold);
+        }
+
+        public void FitSquadronPanel()
+        {
+            if (squadronPanel == null) return;
+            // Keep every wing command on-screen on narrow/enlarged canvases, including window resizes while paused.
+            // This presentation-only adjustment does not rebuild UI or advance/save the simulation.
+            var availableWidth = ui.Root.rect.width - 40f;
+            var fit = availableWidth > 0f ? Mathf.Min(1f, availableWidth / 1880f) : 1f;
+            squadronPanel.localScale = new Vector3(fit, fit, 1f);
         }
 
         private void AddRoomDetail(Transform parent, string id, ShipState ship, ShipSystemState system, List<CrewState> crew, bool allocatedPower,

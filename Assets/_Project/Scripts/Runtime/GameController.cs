@@ -283,10 +283,10 @@ namespace AetherArk.Runtime
                     if (Input.GetKeyDown(KeyCode.F)) { Fire(ShipSystemType.Weapons); return true; }
                     if (Input.GetKeyDown(KeyCode.S)) { UseSupport(); return true; }
                     if (Input.GetKeyDown(KeyCode.R)) { EmergencyOrdnance(); return true; }
-                    for (var i = 0; i < Simulation.State.squadrons.Count && i < 2; i++)
+                    for (var i = 0; i < Simulation.State.squadrons.Count && i < SquadronShortcuts.MaxSlots; i++)
                     {
                         if (!Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i))) continue;
-                        LaunchSquadron(Simulation.State.squadrons[i].id, SquadronMission.Bombard, ShipSystemType.Weapons);
+                        LaunchSquadronShortcut(i);
                         return true;
                     }
                     break;
@@ -426,6 +426,8 @@ namespace AetherArk.Runtime
         {
             Audio.Observe(Simulation);
             Audio.Tick(Time.unscaledDeltaTime, Simulation?.State, AudioSettingsOpen);
+            if (!AudioSettingsOpen && Screen == FrontendScreen.Game && Simulation != null && Simulation.State.phase == GamePhase.Combat)
+                view.FitSquadronPanel();
         }
 
         private void OnDestroy() => Audio?.Dispose();
@@ -533,6 +535,13 @@ namespace AetherArk.Runtime
         public void Overcharge(ShipSystemType type) => Apply(() => Simulation.Execute(new OverchargeCommand(type)));
         public void LaunchSquadron(string squadronId, SquadronMission mission, ShipSystemType target) =>
             Apply(() => Simulation.Execute(new LaunchSquadronCommand(squadronId, mission, target)));
+        public void LaunchSquadronShortcut(int slot)
+        {
+            if (Simulation == null || Screen != FrontendScreen.Game || AudioSettingsOpen || Simulation.State.phase != GamePhase.Combat ||
+                slot < 0 || slot >= SquadronShortcuts.MaxSlots || slot >= Simulation.State.squadrons.Count) return;
+            var squadron = Simulation.State.squadrons[slot];
+            LaunchSquadron(squadron.id, SquadronShortcuts.MissionFor(slot, squadron), Simulation.State.selectedEnemySystem);
+        }
         public void UseSupport() => Apply(() => Simulation.UseSupportAbility());
         public void FieldRepair() => Apply(() => Simulation.FieldRepair());
         public void RefitSquadron() => Apply(() => Simulation.RefitSquadrons());

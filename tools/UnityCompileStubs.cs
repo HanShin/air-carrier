@@ -34,6 +34,7 @@ namespace UnityEngine
     {
         public int childCount { get; set; }
         public Vector3 localEulerAngles { get; set; }
+        public Vector3 localScale { get; set; }
         public void SetParent(Transform parent, bool worldPositionStays) { }
         public Transform GetChild(int index) => new Transform();
         public void SetAsFirstSibling() { }
@@ -41,6 +42,7 @@ namespace UnityEngine
 
     public class RectTransform : Transform
     {
+        public Rect rect { get; set; }
         public Vector2 anchorMin { get; set; }
         public Vector2 anchorMax { get; set; }
         public Vector2 pivot { get; set; }

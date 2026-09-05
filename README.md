@@ -12,6 +12,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - FTL-style combat screen: both ships are drawn as top-down deck plans (`ShipBlueprintView`) from per-ship `DeckPlan` data. Rooms are coloured by condition, show power pips and integrity, and carry fire/breach/oxygen overlays; crew appear as lineage-coloured tokens inside rooms and as a portrait column on the left. A detail strip under each blueprint reports the selected room's condition, hazards and posted crew, and the air-wing bar uses FTL-style slot cards with strength pips and mission gauges. Clicking a room or token issues the same commands as before.
 - Air-wing feedback: launch/mission/return progress, target labels, recovery notices, and pilot sortie state.
 - Pilot-safe sorties: the simulation and mission buttons share a read-only eligibility query. Missing, dead, downed or already-deployed pilots cannot launch; cards display the localized reason, pilot name and authoritative ordnance cost. Rescue restores eligibility, while replacing airframes does not resurrect a pilot. See `docs/PILOT_LAUNCH_VALIDATION.md` for coverage and the 600-run regression audit.
+- Complete air-wing controls: Zephyr's third wing is now visible and commandable. Two bays keep the original rows; three or more use side-by-side cards with all five missions, status, pilot and cost. The panel fits narrow windows and enlarged UI, including resizing while paused. Number keys 1/2 still bombard; additional bays use their equipped specialty (Zephyr's 3 launches recon). See `docs/SQUADRON_UI_COMPLETION.md`.
 - Warning UX: localized severity banner, explicit auto-pause reason, in-combat auto-pause toggle, and warning context that remains visible until combat resumes.
 
 - Route map drawn as a star map: circular nodes with encounter glyphs and a numbered badge on reachable nodes, a storm-front band over closed columns plus an amber warning band for the column that closes after the next jump, a legend, and a select-then-depart preview panel (aether cost vs stock, weather modifiers, recommended altitude, threat note). Number keys still jump immediately.
@@ -24,7 +25,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - Six authored personality traits and six professional backgrounds now affect play as small stackable crew modifiers: fire and oxygen resistance, resonance safety, repairs, boarding defence, weather endurance, sortie performance, infirmary healing and same-room rescue support. Empty or unknown identity keys remain neutral for old-save compatibility, and combat crew cards show both labels.
 - Run-scoped crew progression and port recruitment: every surviving crew member gains one XP per combat victory, levels at 4 and 8 XP up to skill level 3, and improves their specialty (repair, gunnery/navigation, medicine, boarding, resonance safety or sortie handling). Each between-region port offers one deterministic recruit drawn from six authored lineage/role/trait/background combinations for salvage. The active roster is capped at eight, recruitment is limited to once per port, and the equipment market and crew roster have separate tabs.
 - Free pause, adjustable combat speed, warning auto-pause, UI scaling, high contrast, reduced motion, and a rebindable pause key.
-- Two persistent air wings with intercept, bombard, escort, recon, and assault missions.
+- Two or three persistent air wings, depending on flagship, with intercept, bombard, escort, recon, and assault missions. All embarked wings are accessible in combat.
 - Twelve enemy silhouettes and thirty configs (`tools/gen_enemies.py` → `EnemyLibrary.cs`): cutter, strike carrier, scout frigate, boarding barge, lancer destroyer, minelayer, firebrand, storm cruiser, bulwark monitor, dreadnought, hive carrier and wraith, each with a deck plan and transparent top-down ship art, plus loadout variants and veterans gated by region (`minRegion`) so later regions meet new threats rather than scaled copies. The Gate Warden has its own thirteenth art asset. Missing art safely falls back to the procedural hull. The locked first expedition still meets only the baseline cutter and cruiser. Enemy names are localized.
 - Twenty transparent equipment badges give the eight module categories, seven weapon families and five air-wing roles a consistent visual language. The same role icons appear in port offers, mounted weapon slots, squadron cards and mission commands while names and combat values remain explicit.
 - Seven painted widescreen environments give each of the six campaign regions its own visual identity and switch to a dedicated awakening Throne Gate backdrop for the final battle. The menu uses the new carrier key art; missing regional art falls back to the original storm sky. The generated source files, mapping rules and prompts are documented in `docs/REGION_BACKGROUND_ART.md`.
@@ -54,7 +55,7 @@ Keyboard access for the current slice:
 - Menu: `N` new expedition, `C` continue, `L` language.
 - Setup: `Enter` launch, `Esc` back.
 - Route and encounters: `1`–`9` choose the numbered available option.
-- Combat: `Space` pause/resume, `F` fire, `1`/`2` launch that wing on bombardment, `S` call support, `R` assemble emergency ordnance, `Z` enlarge/restore both decks.
+- Combat: `Space` pause/resume, `F` fire, `1`/`2` launch that wing on bombardment, `3` launch Zephyr's recon wing (additional bays follow the equipped specialty after replacement), `S` call support, `R` assemble emergency ordnance, `Z` enlarge/restore both decks. Squadron shortcuts attack the selected enemy compartment, matching their on-screen buttons.
 
 Emergency ordnance first consumes salvage, then supplies, then lives. It adds instability and costs morale, but guarantees that an empty magazine cannot permanently trap a run in combat.
 
@@ -66,7 +67,7 @@ Default pause is `Space`; it can be changed to `P` during expedition setup. Save
 
 ## Tests and validation
 
-- Current Unity suite: 163 EditMode and 13 PlayMode tests, including pilot eligibility, read-only rejection, rescue/recovery, save/resume and localized disabled-button coverage.
+- Current Unity suite: 179 EditMode and 19 PlayMode tests, including pilot eligibility, read-only rejection, rescue/recovery, save/resume, localized disabled buttons, all-bay layout/raycast checks, narrow/enlarged canvases, shortcut routing and port wing replacement.
 - In Unity: **Window → General → Test Runner → EditMode → Run All**.
 - Command-line Unity test: `Unity -batchmode -nographics -projectPath <repo> -runTests -testPlatform EditMode -testResults <results.xml>`.
 - macOS development build: execute `AetherArk.Editor.ProjectBuilder.BuildMac`; output is `Builds/AetherArk.app`.
