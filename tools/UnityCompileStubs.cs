@@ -102,6 +102,7 @@ namespace UnityEngine
 
     public class Sprite : Object
     {
+        public Rect rect => new Rect(0, 0, 1536, 1024);
         public static Sprite Create(Texture2D texture, Rect rect, Vector2 pivot, float pixelsPerUnit) => new Sprite();
     }
     public class Font : Object
@@ -178,7 +179,8 @@ namespace UnityEngine
         Alpha6,
         Alpha7,
         Alpha8,
-        Alpha9
+        Alpha9,
+        Z
     }
     public enum RenderMode { ScreenSpaceOverlay }
     public enum FontStyle { Normal, Bold }
@@ -198,6 +200,14 @@ namespace UnityEngine
     {
         public RenderMode renderMode { get; set; }
         public int sortingOrder { get; set; }
+    }
+
+    public class CanvasRenderer : Component { }
+
+    [AttributeUsage(AttributeTargets.Class)]
+    public sealed class RequireComponent : Attribute
+    {
+        public RequireComponent(Type component) { }
     }
 
     public class CanvasScaler : Behaviour
@@ -247,6 +257,21 @@ namespace UnityEngine.UI
     {
         public UnityEngine.Sprite sprite { get; set; }
         public bool preserveAspect { get; set; }
+    }
+
+    public class MaskableGraphic : Graphic
+    {
+        protected virtual void OnPopulateMesh(VertexHelper mesh) { }
+        protected UnityEngine.Rect GetPixelAdjustedRect() => new UnityEngine.Rect();
+    }
+    public class RectMask2D : UnityEngine.Behaviour { }
+
+    public class VertexHelper
+    {
+        public int currentVertCount => 0;
+        public void Clear() { }
+        public void AddVert(UnityEngine.Vector3 position, UnityEngine.Color color, UnityEngine.Vector2 uv) { }
+        public void AddTriangle(int a, int b, int c) { }
     }
 
     public class RawImage : Graphic

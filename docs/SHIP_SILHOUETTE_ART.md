@@ -1,5 +1,7 @@
 # 적 함선 실루엣 아트
 
+2026-09-05 추가: 커터·순양함·수호함은 새 외형으로 교체했고 기함 3종도 추가했다. 최신 프롬프트와 갑판 정렬 규칙은 `FLEET_VISUAL_REFRESH.md`에 기록한다. 아래 내용은 나머지 적함의 최초 제작 기준이다.
+
 기준일: 2026-09-04. 내장 ImageGen으로 생성한 투명 PNG 13종을 `Assets/_Project/Resources/Art/Ships/`에 저장한다. 각 파일명은 `ShipState.deckPlanId`와 같고, `ShipBlueprintView`가 `Resources.Load<Sprite>`로 갑판 UI 뒤에 배치한다. 스프라이트가 없으면 기존 절차적 선체로 폴백한다.
 
 ## 파일 목록

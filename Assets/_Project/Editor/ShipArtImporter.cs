@@ -10,7 +10,7 @@ namespace AetherArk.Editor
         private const string IconArtFolder = "Assets/_Project/Resources/Art/Icons/";
         private const string BackgroundArtFolder = "Assets/_Project/Resources/Art/Backgrounds/";
 
-        public override uint GetVersion() => 3;
+        public override uint GetVersion() => 4;
 
         private void OnPreprocessTexture()
         {
@@ -26,6 +26,15 @@ namespace AetherArk.Editor
             importer.mipmapEnabled = false;
             importer.wrapMode = TextureWrapMode.Clamp;
             importer.filterMode = FilterMode.Bilinear;
+            // Keep the source aspect ratio and the measured cutaway UV bounds intact.
+            importer.npotScale = TextureImporterNPOTScale.None;
+            if (!isBackground)
+            {
+                var settings = new TextureImporterSettings();
+                importer.ReadTextureSettings(settings);
+                settings.spriteMeshType = SpriteMeshType.FullRect;
+                importer.SetTextureSettings(settings);
+            }
             importer.maxTextureSize = assetPath.StartsWith(IconArtFolder, System.StringComparison.Ordinal) ? 256 : 2048;
         }
     }

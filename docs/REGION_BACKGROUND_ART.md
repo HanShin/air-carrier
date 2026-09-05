@@ -1,5 +1,7 @@
 # 공역별 배경 아트
 
+2026-09-05 추가: 메뉴와 원정 준비 화면은 `ark_title.png`를 사용한다. 기존 `sky_storm_background`는 누락 파일의 폴백으로 유지한다. 메인 화면 생성 프롬프트는 `FLEET_VISUAL_REFRESH.md` 참고.
+
 기준일: 2026-09-04. 내장 ImageGen으로 생성한 16:9 계열 RGB PNG 7종을 `Assets/_Project/Resources/Art/Backgrounds/`에 저장한다. `BackgroundArt`가 현재 `regionIndex`와 `isFinalBattle`을 Resources 경로로 변환하고, `GameController`가 처음 요청된 텍스처를 캐시한다. 메뉴·원정 준비 화면과 누락된 파일은 기존 `sky_storm_background`로 폴백한다.
 
 ## 파일과 역할

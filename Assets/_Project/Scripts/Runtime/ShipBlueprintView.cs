@@ -19,6 +19,8 @@ namespace AetherArk.Runtime
         public bool reducedMotion;
         public bool highContrast;
         public bool showAllocatedPower = true;
+        public bool exteriorOnly;
+        public bool enlargeDeck;
     }
 
     /// <summary>
@@ -32,8 +34,8 @@ namespace AetherArk.Runtime
         private static readonly Dictionary<string, Sprite> HullSprites = new Dictionary<string, Sprite>();
         private static readonly Color HullPlate = new Color(0.075f, 0.095f, 0.125f, 0.985f);
         private static readonly Color HullEdge = new Color(0.72f, 0.55f, 0.24f, 0.9f);
-        private static readonly Color RoomOperational = new Color(0.09f, 0.3f, 0.34f, 0.96f);
-        private static readonly Color RoomUnpowered = new Color(0.2f, 0.22f, 0.25f, 0.96f);
+        private static readonly Color RoomOperational = new Color(0.045f, 0.1f, 0.13f, 0.9f);
+        private static readonly Color RoomUnpowered = new Color(0.11f, 0.12f, 0.14f, 0.94f);
         private static readonly Color RoomDamaged = new Color(0.42f, 0.24f, 0.09f, 0.96f);
         private static readonly Color RoomDisabled = new Color(0.36f, 0.09f, 0.09f, 0.96f);
         private static readonly Color Fire = new Color(1f, 0.45f, 0.1f, 1f);
@@ -61,14 +63,42 @@ namespace AetherArk.Runtime
 
             const float bowMargin = 40f;
             const float sternMargin = 20f;
-            const float gap = 6f;
+            const float gap = 3f;
             var cell = Mathf.Floor(Mathf.Min((size.x - bowMargin - sternMargin - 12f) / plan.columns, (size.y - 36f) / plan.rows));
             var gridWidth = cell * plan.columns;
             var gridHeight = cell * plan.rows;
             var gridX = Mathf.Floor((size.x - gridWidth - bowMargin + sternMargin) / 2f);
             var gridY = Mathf.Floor((size.y - gridHeight) / 2f);
+            var artId = string.IsNullOrEmpty(ship.deckPlanId) ? plan.shipId : ship.deckPlanId;
+            var sprite = LoadHullSprite(artId);
+            Rect? artBounds = null;
+            if (sprite != null && ShipArtLayout.TryDeckArea(artId, out var bay))
+            {
+                var fitted = ShipArtLayout.FitSprite(size, new Vector2(sprite.rect.width, sprite.rect.height));
+                gridX = fitted.x + bay.x * fitted.width;
+                gridY = fitted.y + bay.y * fitted.height;
+                gridWidth = bay.width * fitted.width;
+                gridHeight = bay.height * fitted.height;
+                if (options.enlargeDeck && !options.exteriorOnly)
+                {
+                    // Magnify both the hull and its cutaway together; clipping is local to the viewport.
+                    var desired = Mathf.Max(plan.columns * 72f / gridWidth, plan.rows * 72f / gridHeight);
+                    var maximum = Mathf.Min((size.x - 28f) / gridWidth, (size.y - 28f) / gridHeight);
+                    var zoom = Mathf.Max(1f, Mathf.Min(desired, maximum));
+                    gridWidth *= zoom;
+                    gridHeight *= zoom;
+                    gridX = (size.x - gridWidth) / 2f;
+                    gridY = (size.y - gridHeight) / 2f;
+                    artBounds = new Rect(gridX - bay.x * fitted.width * zoom, gridY - bay.y * fitted.height * zoom,
+                        fitted.width * zoom, fitted.height * zoom);
+                    container.gameObject.AddComponent<RectMask2D>();
+                }
+            }
+            var cellWidth = gridWidth / plan.columns;
+            var cellHeight = gridHeight / plan.rows;
 
-            DrawHull(ui, container, ship.deckPlanId, size, gridX, gridY, gridWidth, gridHeight, bowMargin, options.highContrast);
+            DrawHull(ui, container, artId, size, gridX, gridY, gridWidth, gridHeight, bowMargin, options.highContrast, artBounds);
+            if (options.exteriorOnly) return;
 
             for (var i = 0; i < plan.tiles.Count; i++)
             {
@@ -76,22 +106,23 @@ namespace AetherArk.Runtime
                 var system = ship.GetSystem(tile.system);
                 if (system == null) continue;
                 var room = ship.GetRoom(tile.system);
-                var x = gridX + tile.column * cell + gap / 2f;
-                var y = gridY + (plan.rows - tile.row - tile.height) * cell + gap / 2f;
-                var w = tile.width * cell - gap;
-                var h = tile.height * cell - gap;
+                var x = gridX + tile.column * cellWidth + gap / 2f;
+                var y = gridY + (plan.rows - tile.row - tile.height) * cellHeight + gap / 2f;
+                var w = tile.width * cellWidth - gap;
+                var h = tile.height * cellHeight - gap;
                 DrawRoom(ui, l10n, container, ship, system, room, new Vector2(x, y), new Vector2(w, h), options);
             }
         }
 
         private static void DrawHull(UiFactory ui, RectTransform container, string deckPlanId, Vector2 canvasSize, float gridX, float gridY,
-            float gridWidth, float gridHeight, float bowMargin, bool highContrast)
+            float gridWidth, float gridHeight, float bowMargin, bool highContrast, Rect? imageBounds)
         {
             var sprite = LoadHullSprite(deckPlanId);
             if (sprite != null)
             {
-                var artRect = ui.Rect("HullArt_" + deckPlanId, container, Vector2.zero, canvasSize);
-                var art = ui.Image(artRect, highContrast ? Color.white : new Color(1f, 1f, 1f, 0.9f));
+                var bounds = imageBounds ?? new Rect(0f, 0f, canvasSize.x, canvasSize.y);
+                var artRect = ui.Rect("HullArt_" + deckPlanId, container, new Vector2(bounds.x, bounds.y), new Vector2(bounds.width, bounds.height));
+                var art = ui.Image(artRect, Color.white);
                 art.sprite = sprite;
                 art.preserveAspect = true;
                 art.raycastTarget = false;
@@ -143,22 +174,34 @@ namespace AetherArk.Runtime
             if (options.highContrast) fill = new Color(fill.r * 1.25f, fill.g * 1.25f, fill.b * 1.25f, 1f);
 
             var localSystem = system.type;
+            var compact = size.y < 70f || size.x < 65f;
             var button = ui.Button(options.roomNamePrefix + system.type, container, l10n.T(system.displayKey),
                 options.onRoomClick == null ? (Action)null : () => options.onRoomClick(localSystem),
-                position, size, fill, UiFactory.TextPrimary, size.y >= 100f ? 15 : 14);
+                position, size, fill, UiFactory.TextPrimary, compact ? 10 : 13);
+            var accent = condition == RoomCondition.Disabled ? UiFactory.Danger
+                : condition == RoomCondition.Damaged ? UiFactory.Brass
+                : condition == RoomCondition.Unpowered ? UiFactory.TextMuted : UiFactory.Aether;
+            var surfaceRect = ui.Rect("DeckSurface_" + system.type, button.transform, Vector2.zero, size);
+            var surface = surfaceRect.gameObject.AddComponent<DeckSurfaceGraphic>();
+            surface.systemType = system.type;
+            surface.accent = new Color(accent.r, accent.g, accent.b, 0.55f);
+            surface.raycastTarget = false;
+            surfaceRect.SetAsFirstSibling();
             var labelText = button.GetComponentInChildren<Text>();
             if (labelText != null)
             {
                 labelText.alignment = TextAnchor.UpperCenter;
-                labelText.rectTransform.anchoredPosition = new Vector2(0f, -7f);
-                labelText.resizeTextForBestFit = false;
+                var titleHeight = compact ? 24f : 30f;
+                labelText.rectTransform.anchoredPosition = new Vector2(2f, size.y - titleHeight - 6f);
+                labelText.rectTransform.sizeDelta = new Vector2(size.x - 4f, titleHeight);
+                labelText.resizeTextMinSize = 9;
             }
             var pips = PowerPips(system, options.showAllocatedPower);
             if (pips.Length > 0)
             {
                 var lit = options.showAllocatedPower ? system.power : system.EffectivePower;
-                ui.Text("Pips_" + system.type, container, pips, 11, lit > 0 ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.UpperCenter,
-                    new Vector2(position.x, position.y + size.y - 44f), new Vector2(size.x, 16f), FontStyle.Bold);
+                ui.Text("Pips_" + system.type, container, pips, compact ? 8 : 10, lit > 0 ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.UpperRight,
+                    new Vector2(position.x + 2f, position.y + 8f), new Vector2(size.x - 6f, 12f), FontStyle.Bold);
             }
 
             // Oxygen and hazards.
@@ -210,7 +253,7 @@ namespace AetherArk.Runtime
 
         private static void DrawCrewTokens(UiFactory ui, RectTransform container, ShipSystemType roomType, Vector2 position, Vector2 size, BlueprintOptions options)
         {
-            var token = Mathf.Clamp(Mathf.Min(size.x, size.y) * 0.36f, 20f, 32f);
+            var token = Mathf.Clamp(Mathf.Min(size.x, size.y) * 0.28f, 16f, 28f);
             var index = 0;
             for (var i = 0; i < options.crew.Count; i++)
             {
@@ -218,7 +261,7 @@ namespace AetherArk.Runtime
                 if (crew.currentRoom != roomType || crew.isDead || crew.onSortie) continue;
                 var x = position.x + 6f + index * (token + 4f);
                 if (x + token > position.x + size.x - 4f) break;
-                var y = position.y + 12f;
+                var y = position.y + 7f;
                 var selected = options.selectedCrewId == crew.id;
                 var ringColor = selected ? Color.white : crew.isCaptain ? UiFactory.Brass : new Color(0f, 0f, 0f, 0.55f);
                 ui.Circle("CrewRing_" + crew.id, container, new Vector2(x - 2f, y - 2f), new Vector2(token + 4f, token + 4f), ringColor).raycastTarget = false;

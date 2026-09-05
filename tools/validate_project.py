@@ -78,6 +78,7 @@ def validate_assets() -> None:
         "enemy_cutter", "enemy_carrier", "enemy_scout", "enemy_boarder", "enemy_lancer",
         "enemy_minelayer", "enemy_firebrand", "enemy_cruiser", "enemy_monitor",
         "enemy_dreadnought", "enemy_hive", "enemy_wraith", "enemy_warden",
+        "ship_vanguard", "ship_bastion", "ship_zephyr",
     }
     present = {path.stem for path in ship_art.glob("*.png") if path.stat().st_size > 0}
     missing = sorted(expected_silhouettes - present)
@@ -96,7 +97,7 @@ def validate_assets() -> None:
             fail(f"missing {folder.lower()} icons: " + ", ".join(missing_icons))
     expected_backgrounds = {
         "dawn_archipelago", "storm_corridor", "icefield_heights", "imperial_cordon",
-        "abyssal_strait", "sky_throne", "throne_gate_finale",
+        "abyssal_strait", "sky_throne", "throne_gate_finale", "ark_title",
     }
     background_folder = ROOT / "Assets/_Project/Resources/Art/Backgrounds"
     present_backgrounds = {path.stem for path in background_folder.glob("*.png") if path.stat().st_size > 0}
@@ -104,7 +105,7 @@ def validate_assets() -> None:
     if missing_backgrounds:
         fail("missing campaign backgrounds: " + ", ".join(missing_backgrounds))
     print(
-        f"OK: required scene, settings, fallback background, {len(expected_backgrounds)} campaign backgrounds, "
+        f"OK: required scene, settings, fallback background, {len(expected_backgrounds)} campaign/title backgrounds, "
         f"{len(expected_silhouettes)} ship silhouettes, and 20 equipment icons"
     )
 

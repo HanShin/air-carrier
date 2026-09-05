@@ -6,6 +6,7 @@ namespace AetherArk.Runtime
     public static class BackgroundArt
     {
         public const string FallbackPath = "Art/sky_storm_background";
+        public const string MenuPath = "Art/Backgrounds/ark_title";
         public const string FinalePath = "Art/Backgrounds/throne_gate_finale";
 
         public static string ResourcePath(int regionIndex, bool isFinalBattle)

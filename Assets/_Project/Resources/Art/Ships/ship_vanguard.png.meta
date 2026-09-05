@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 682cf365fdf8a46ca8fc820b72f0442f
+guid: d08e67a56f726415aacd9c23c94f84be
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -3822246820041734243
-    second: breacher_0
+      213: -4740402132881550890
+    second: ship_vanguard_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -74,7 +74,7 @@ TextureImporter:
   platformSettings:
   - serializedVersion: 4
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 256
+    maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 1
@@ -102,13 +102,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: breacher_0
+      name: ship_vanguard_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 1254
-        height: 1254
+        width: 1536
+        height: 1024
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -117,8 +117,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: d97cb8fa4c6a4fac0800000000000000
-      internalID: -3822246820041734243
+      spriteID: 6d157193065b63eb0800000000000000
+      internalID: -4740402132881550890
       vertices: []
       indices: 
       edges: []

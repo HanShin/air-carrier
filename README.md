@@ -6,6 +6,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 
 ## What is implemented
 
+- Fleet visual refresh (0.9): three dedicated flagship hull sprites, redesigned cutter/cruiser/warden art, a cinematic carrier title screen and a live flagship preview during setup. Cutaway rooms follow measured hull bounds with recessed metal surfaces and equipment details. Exterior/inside views and deck enlargement preserve all combat controls; selecting a crew member opens the enlarged player deck. See `docs/FLEET_VISUAL_REFRESH.md` for the asset paths, exact generation prompts and scope (2D art, not 3D meshes).
 - Combat UX pass: mouse-ready command bindings, disabled-state feedback, room integrity/power/hazard bars, layered defense meters, and threat countdowns.
 - FTL-style combat screen: both ships are drawn as top-down deck plans (`ShipBlueprintView`) from per-ship `DeckPlan` data. Rooms are coloured by condition, show power pips and integrity, and carry fire/breach/oxygen overlays; crew appear as lineage-coloured tokens inside rooms and as a portrait column on the left. A detail strip under each blueprint reports the selected room's condition, hazards and posted crew, and the air-wing bar uses FTL-style slot cards with strength pips and mission gauges. Clicking a room or token issues the same commands as before.
 - Air-wing feedback: launch/mission/return progress, target labels, recovery notices, and pilot sortie state.
@@ -24,7 +25,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - Two persistent air wings with intercept, bombard, escort, recon, and assault missions.
 - Twelve enemy silhouettes and thirty configs (`tools/gen_enemies.py` → `EnemyLibrary.cs`): cutter, strike carrier, scout frigate, boarding barge, lancer destroyer, minelayer, firebrand, storm cruiser, bulwark monitor, dreadnought, hive carrier and wraith, each with a deck plan and transparent top-down ship art, plus loadout variants and veterans gated by region (`minRegion`) so later regions meet new threats rather than scaled copies. The Gate Warden has its own thirteenth art asset. Missing art safely falls back to the procedural hull. The locked first expedition still meets only the baseline cutter and cruiser. Enemy names are localized.
 - Twenty transparent equipment badges give the eight module categories, seven weapon families and five air-wing roles a consistent visual language. The same role icons appear in port offers, mounted weapon slots, squadron cards and mission commands while names and combat values remain explicit.
-- Seven hand-painted widescreen environments give each of the six campaign regions its own visual identity and switch to a dedicated awakening Throne Gate backdrop for the final battle. Menus retain the original storm-sky illustration, and missing regional art falls back to it safely. The generated source files, mapping rules and prompts are documented in `docs/REGION_BACKGROUND_ART.md`.
+- Seven painted widescreen environments give each of the six campaign regions its own visual identity and switch to a dedicated awakening Throne Gate backdrop for the final battle. The menu uses the new carrier key art; missing regional art falls back to the original storm sky. The generated source files, mapping rules and prompts are documented in `docs/REGION_BACKGROUND_ART.md`.
 - Boarding: intruders in a room injure crew and, if nobody is present, wreck the system; crew fight them off, marines fastest. Intercept charges repel boarding craft the way they break air strikes.
 - Low/mid/high altitude, six weather profiles, support ships, convoy population/morale, field repairs, and squadron refits.
 - Deterministic route/combat/event random streams and versioned atomic profile/run saves. Genuine JsonUtility save fixtures live under `Assets/_Project/Tests/EditMode/Fixtures/<version>/` (written by **Aether Ark → Write Save Fixtures** or `-executeMethod AetherArk.Editor.FixtureWriter.WriteSaveFixtures`); an EditMode test loads them through the current migrations and resumes play, so a schema change that breaks old saves fails CI.
@@ -50,7 +51,7 @@ Keyboard access for the current slice:
 - Menu: `N` new expedition, `C` continue, `L` language.
 - Setup: `Enter` launch, `Esc` back.
 - Route and encounters: `1`–`9` choose the numbered available option.
-- Combat: `Space` pause/resume, `F` fire, `1`/`2` launch that wing on bombardment, `S` call support, `R` assemble emergency ordnance.
+- Combat: `Space` pause/resume, `F` fire, `1`/`2` launch that wing on bombardment, `S` call support, `R` assemble emergency ordnance, `Z` enlarge/restore both decks.
 
 Emergency ordnance first consumes salvage, then supplies, then lives. It adds instability and costs morale, but guarantees that an empty magazine cannot permanently trap a run in combat.
 
@@ -77,4 +78,4 @@ The included EditMode tests cover deterministic generation, the full seven-jump 
 - `Assets/_Project/Tests/EditMode`: automated rule and save tests.
 - `docs/GDD.md`: locked design rules and production targets.
 
-Campaign backgrounds live under `Assets/_Project/Resources/Art/Backgrounds/`; the original `sky_storm_background.png` remains the menu and missing-asset fallback. `BackgroundArt` derives the current texture from region/finale state and `GameController` caches loaded textures.
+Campaign backgrounds and `ark_title.png` live under `Assets/_Project/Resources/Art/Backgrounds/`; the original `sky_storm_background.png` remains the missing-asset fallback. `BackgroundArt` derives the current texture from region/finale state and `GameController` caches loaded textures.

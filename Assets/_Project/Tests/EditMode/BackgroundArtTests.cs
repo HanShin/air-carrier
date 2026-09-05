@@ -32,5 +32,19 @@ namespace AetherArk.Tests
             Assert.That(BackgroundArt.ResourcePath(0, false), Is.EqualTo(BackgroundArt.FallbackPath));
             Assert.That(Resources.Load<Texture2D>(BackgroundArt.FallbackPath), Is.Not.Null);
         }
+
+        [Test]
+        public void RefinedArt_ImportsWithTheCanvasUsedForDeckAlignment()
+        {
+            var ids = new[] { "ship_vanguard", "ship_bastion", "ship_zephyr", "enemy_cutter", "enemy_cruiser", "enemy_warden" };
+            foreach (var id in ids)
+            {
+                var sprite = ShipBlueprintView.LoadHullSprite(id);
+                Assert.That(sprite, Is.Not.Null, id);
+                Assert.That(sprite.rect.width, Is.EqualTo(1536f), id + " source canvas must not be rescaled or cropped");
+                Assert.That(sprite.rect.height, Is.EqualTo(1024f), id);
+            }
+            Assert.That(Resources.Load<Texture2D>(BackgroundArt.MenuPath), Is.Not.Null);
+        }
     }
 }

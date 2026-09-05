@@ -18,6 +18,10 @@ namespace AetherArk.Runtime
         private ShipSystemType selectedPlayerSystem = ShipSystemType.Weapons;
         private ShipSystemType selectedEnemySystem = ShipSystemType.Weapons;
         private bool showPortCrew;
+        private bool showPlayerExterior;
+        private bool showEnemyExterior;
+        private bool enlargePlayerDeck;
+        private bool enlargeEnemyDeck;
 
         private Color PanelColor => controller.Profile.accessibility.highContrast ? new Color(0.01f, 0.02f, 0.035f, 0.99f) : UiFactory.Panel;
 
@@ -31,13 +35,22 @@ namespace AetherArk.Runtime
         public void ShowMenu(bool hasRun)
         {
             ui.Clear();
-            ui.Background(controller.Background, new Color(0.01f, 0.025f, 0.055f, 0.48f));
-            ui.Text("Title", ui.Root, l10n.T("game.title"), 82, UiFactory.TextPrimary, TextAnchor.MiddleCenter,
-                new Vector2(510f, 690f), new Vector2(900f, 120f), FontStyle.Bold);
-            ui.Text("Subtitle", ui.Root, l10n.T("game.subtitle"), 24, UiFactory.Brass, TextAnchor.MiddleCenter,
-                new Vector2(510f, 645f), new Vector2(900f, 50f));
+            showPlayerExterior = false;
+            showEnemyExterior = false;
+            enlargePlayerDeck = false;
+            enlargeEnemyDeck = false;
+            ui.Background(controller.Background, new Color(0.01f, 0.025f, 0.055f, 0.15f));
+            var menuVeil = ui.PanelRect("MenuVeil", ui.Root, new Vector2(64f, 134f), new Vector2(626f, 818f),
+                new Color(0.02f, 0.04f, 0.065f, controller.Profile.accessibility.highContrast ? 0.99f : 0.76f));
+            ui.PanelRect("MenuRule", menuVeil, new Vector2(48f, 736f), new Vector2(64f, 3f), UiFactory.Brass);
+            ui.Text("MenuKicker", menuVeil, "A E T H E R   A R K", 18, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(48f, 672f), new Vector2(530f, 42f), FontStyle.Bold);
+            ui.Text("Title", menuVeil, l10n.T("game.title"), 64, UiFactory.TextPrimary, TextAnchor.MiddleLeft,
+                new Vector2(48f, 552f), new Vector2(542f, 110f), FontStyle.Bold);
+            ui.Text("Subtitle", menuVeil, l10n.T("game.subtitle"), 21, UiFactory.TextMuted, TextAnchor.UpperLeft,
+                new Vector2(48f, 468f), new Vector2(518f, 74f));
 
-            var panel = ui.PanelRect("MenuPanel", ui.Root, new Vector2(700f, 210f), new Vector2(520f, 390f), PanelColor);
+            var panel = ui.Rect("MenuPanel", menuVeil, new Vector2(0f, 32f), new Vector2(520f, 390f));
             if (hasRun)
             {
                 ui.Button("Continue", panel, l10n.T("menu.continue"), controller.ContinueRun,
@@ -49,8 +62,8 @@ namespace AetherArk.Runtime
                 new Vector2(60f, 114f), new Vector2(400f, 62f));
             ui.Button("Quit", panel, l10n.T("menu.quit"), controller.Quit,
                 new Vector2(60f, 32f), new Vector2(400f, 62f), new Color(0.22f, 0.13f, 0.16f, 0.95f));
-            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.8 · REGION BACKGROUNDS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
-                new Vector2(1500f, 28f), new Vector2(360f, 30f));
+            ui.Text("Version", ui.Root, "VERTICAL SLICE 0.9 · FLEET VISUALS", 15, UiFactory.TextMuted, TextAnchor.MiddleRight,
+                new Vector2(1420f, 28f), new Vector2(440f, 30f));
         }
 
         public void ShowSetup()
@@ -99,17 +112,24 @@ namespace AetherArk.Runtime
             ui.Text("Warning", left, l10n.T("setup.warning"), 14, UiFactory.Danger, TextAnchor.MiddleCenter,
                 new Vector2(52f, 22f), new Vector2(656f, 36f), FontStyle.Bold);
 
-            var settings = ui.PanelRect("AccessibilityPanel", ui.Root, new Vector2(980f, 250f), new Vector2(760f, 660f), PanelColor);
+            var preview = ui.PanelRect("FlagshipPreview", ui.Root, new Vector2(980f, 690f), new Vector2(760f, 220f), PanelColor);
+            ui.Text("PreviewName", preview, l10n.T(flagship.nameKey), 19, UiFactory.Brass, TextAnchor.MiddleLeft,
+                new Vector2(24f, 172f), new Vector2(280f, 32f), FontStyle.Bold);
+            ui.Text("PreviewStats", preview, $"{l10n.T("ui.hull")} {flagship.hull:0}\n{l10n.T("ui.armor")} {flagship.armor:0}\n{l10n.T("ui.ward")} {flagship.ward:0}",
+                18, UiFactory.TextMuted, TextAnchor.UpperLeft, new Vector2(24f, 34f), new Vector2(180f, 126f));
+            ui.Icon("FlagshipHullPreview", preview, ShipBlueprintView.LoadHullSprite(flagshipId), new Vector2(254f, 2f), new Vector2(488f, 212f));
+
+            var settings = ui.PanelRect("AccessibilityPanel", ui.Root, new Vector2(980f, 170f), new Vector2(760f, 502f), PanelColor);
             ui.Text("AccessTitle", settings, L("접근성·조작", "ACCESSIBILITY & CONTROLS"), 24, UiFactory.Brass, TextAnchor.MiddleLeft,
-                new Vector2(48f, 580f), new Vector2(620f, 50f), FontStyle.Bold);
-            AddSettingButton(settings, 500f, L("경고 시 자동 정지", "Auto-pause on warning"), On(controller.Profile.accessibility.autoPauseOnWarning), controller.ToggleAutoPause);
-            AddSettingButton(settings, 425f, L("전투 속도", "Combat speed"), controller.Profile.accessibility.combatSpeed.ToString("0.0") + "×", controller.CycleCombatSpeed);
-            AddSettingButton(settings, 350f, L("UI 크기", "UI scale"), Mathf.RoundToInt(controller.Profile.accessibility.uiScale * 100f) + "%", controller.CycleUiScale);
-            AddSettingButton(settings, 275f, L("고대비 패널", "High contrast panels"), On(controller.Profile.accessibility.highContrast), controller.ToggleHighContrast);
-            AddSettingButton(settings, 200f, L("움직임 감소", "Reduced motion"), On(controller.Profile.accessibility.reducedMotion), controller.ToggleReducedMotion);
-            AddSettingButton(settings, 125f, L("일시정지 키", "Pause key"), controller.Profile.accessibility.pauseKey, controller.CyclePauseKey);
+                new Vector2(48f, 438f), new Vector2(620f, 50f), FontStyle.Bold);
+            AddSettingButton(settings, 374f, L("경고 시 자동 정지", "Auto-pause on warning"), On(controller.Profile.accessibility.autoPauseOnWarning), controller.ToggleAutoPause);
+            AddSettingButton(settings, 314f, L("전투 속도", "Combat speed"), controller.Profile.accessibility.combatSpeed.ToString("0.0") + "×", controller.CycleCombatSpeed);
+            AddSettingButton(settings, 254f, L("UI 크기", "UI scale"), Mathf.RoundToInt(controller.Profile.accessibility.uiScale * 100f) + "%", controller.CycleUiScale);
+            AddSettingButton(settings, 194f, L("고대비 패널", "High contrast panels"), On(controller.Profile.accessibility.highContrast), controller.ToggleHighContrast);
+            AddSettingButton(settings, 134f, L("움직임 감소", "Reduced motion"), On(controller.Profile.accessibility.reducedMotion), controller.ToggleReducedMotion);
+            AddSettingButton(settings, 74f, L("일시정지 키", "Pause key"), controller.Profile.accessibility.pauseKey, controller.CyclePauseKey);
             ui.Button("Language", settings, l10n.T("menu.language"), controller.ToggleLanguage,
-                new Vector2(48f, 48f), new Vector2(664f, 54f));
+                new Vector2(48f, 14f), new Vector2(664f, 50f));
 
             ui.Button("Back", ui.Root, "[Esc] " + l10n.T("setup.back"), controller.ShowMenu,
                 new Vector2(180f, 76f), new Vector2(260f, 64f));
@@ -744,11 +764,16 @@ namespace AetherArk.Runtime
 
             var hint = string.IsNullOrEmpty(selectedCrewId) ? L("방을 클릭하면 전력 조절 대상이 됩니다", "Click a room to select it for power control")
                 : L("이동할 방을 클릭하십시오", "Click the room to move the selected crew");
+            if (showPlayerExterior) hint = L("선체 외형 보기 · 내부 구획을 누르면 조작 화면으로 돌아갑니다", "Exterior view · choose Interior deck to return to room controls");
             ui.Text("BlueprintHint", panel, hint, 12, string.IsNullOrEmpty(selectedCrewId) ? UiFactory.TextMuted : UiFactory.Aether, TextAnchor.MiddleLeft,
                 new Vector2(18f, 8f), new Vector2(664f, 20f));
             AddRoomDetail(panel, "PlayerRoomDetail", ship, ship.GetSystem(selectedPlayerSystem), state.crew, true, new Vector2(16f, 30f), new Vector2(668f, 64f));
+            ui.Button("PlayerHullView", panel, showPlayerExterior ? L("내부 구획", "Interior deck") : L("선체 외형", "Ship exterior"),
+                () => { showPlayerExterior = !showPlayerExterior; ShowCombat(); }, new Vector2(18f, 516f), new Vector2(150f, 30f), UiFactory.PanelSoft, UiFactory.TextMuted, 13);
+            ui.Button("PlayerDeckZoom", panel, enlargePlayerDeck ? L("전체 보기", "Overview") : L("구획 확대", "Enlarge deck"),
+                () => { enlargePlayerDeck = !enlargePlayerDeck; showPlayerExterior = false; ShowCombat(); }, new Vector2(176f, 516f), new Vector2(150f, 30f), UiFactory.PanelSoft, UiFactory.TextMuted, 13);
 
-            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.DeckPlanFor(ship), new Vector2(16f, 98f), new Vector2(668f, 450f), new BlueprintOptions
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.DeckPlanFor(ship), new Vector2(16f, 98f), new Vector2(668f, 416f), new BlueprintOptions
             {
                 roomNamePrefix = "Room_",
                 selectedSystem = selectedPlayerSystem,
@@ -758,7 +783,9 @@ namespace AetherArk.Runtime
                 onCrewClick = SelectCrew,
                 reducedMotion = controller.Profile.accessibility.reducedMotion,
                 highContrast = controller.Profile.accessibility.highContrast,
-                showAllocatedPower = true
+                showAllocatedPower = true,
+                exteriorOnly = showPlayerExterior,
+                enlargeDeck = enlargePlayerDeck
             });
         }
 
@@ -775,7 +802,18 @@ namespace AetherArk.Runtime
 
         private void SelectCrew(string crewId)
         {
+            showPlayerExterior = false;
+            enlargePlayerDeck = true;
             selectedCrewId = selectedCrewId == crewId ? null : crewId;
+            ShowCombat();
+        }
+
+        public void ToggleDeckZoom()
+        {
+            enlargePlayerDeck = !enlargePlayerDeck;
+            enlargeEnemyDeck = enlargePlayerDeck;
+            showPlayerExterior = false;
+            showEnemyExterior = false;
             ShowCombat();
         }
 
@@ -880,8 +918,12 @@ namespace AetherArk.Runtime
             ui.Text("EnemyTargetHint", panel, l10n.T("ui.mission_target", target != null ? l10n.T(target.displayKey) : string.Empty), 12, UiFactory.Brass, TextAnchor.MiddleLeft,
                 new Vector2(18f, 8f), new Vector2(608f, 20f), FontStyle.Bold);
             AddRoomDetail(panel, "EnemyRoomDetail", ship, target, null, false, new Vector2(16f, 30f), new Vector2(612f, 64f));
+            ui.Button("EnemyHullView", panel, showEnemyExterior ? L("내부 구획", "Interior deck") : L("선체 외형", "Ship exterior"),
+                () => { showEnemyExterior = !showEnemyExterior; ShowCombat(); }, new Vector2(18f, 516f), new Vector2(150f, 30f), UiFactory.PanelSoft, UiFactory.TextMuted, 13);
+            ui.Button("EnemyDeckZoom", panel, enlargeEnemyDeck ? L("전체 보기", "Overview") : L("구획 확대", "Enlarge deck"),
+                () => { enlargeEnemyDeck = !enlargeEnemyDeck; showEnemyExterior = false; ShowCombat(); }, new Vector2(176f, 516f), new Vector2(150f, 30f), UiFactory.PanelSoft, UiFactory.TextMuted, 13);
 
-            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.DeckPlanFor(ship), new Vector2(16f, 98f), new Vector2(612f, 446f), new BlueprintOptions
+            ShipBlueprintView.Draw(ui, l10n, panel, ship, ContentCatalog.DeckPlanFor(ship), new Vector2(16f, 98f), new Vector2(612f, 416f), new BlueprintOptions
             {
                 roomNamePrefix = "EnemySystem_",
                 selectedSystem = selectedEnemySystem,
@@ -889,7 +931,9 @@ namespace AetherArk.Runtime
                 crew = null,
                 reducedMotion = controller.Profile.accessibility.reducedMotion,
                 highContrast = controller.Profile.accessibility.highContrast,
-                showAllocatedPower = false
+                showAllocatedPower = false,
+                exteriorOnly = showEnemyExterior,
+                enlargeDeck = enlargeEnemyDeck
             });
         }
 

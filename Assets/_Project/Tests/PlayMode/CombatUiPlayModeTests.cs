@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using AetherArk.Core;
 using AetherArk.Runtime;
 using NUnit.Framework;
@@ -195,6 +196,46 @@ namespace AetherArk.Tests
             Assert.That(button, Is.Not.Null, objectName + " is missing its Button component.");
             Assert.That(button.interactable, Is.True, objectName + " was unexpectedly disabled.");
             button.onClick.Invoke();
+        }
+
+        [UnityTest]
+        public IEnumerator RefinedShipArt_DoesNotBlockRoomClicksAndExteriorCanBeClosed()
+        {
+            yield return null;
+            var controller = Object.FindFirstObjectByType<GameController>();
+            controller.ShowSetup();
+            yield return null;
+            Assert.That(GameObject.Find("FlagshipHullPreview").GetComponent<Image>().sprite, Is.Not.Null);
+            controller.StartRun();
+            controller.Simulation.BeginCombat(1, false);
+            controller.TogglePause();
+            controller.TogglePause();
+            yield return null;
+
+            var id = controller.Simulation.State.playerShip.id;
+            Assert.That(GameObject.Find("HullArt_" + id), Is.Not.Null, "Flagships must no longer use the flat fallback hull.");
+            ActivateButton("PlayerHullView");
+            yield return null;
+            Assert.That(GameObject.Find("Room_Weapons"), Is.Null);
+            Assert.That(GameObject.Find("HullArt_" + id), Is.Not.Null);
+            ActivateButton("PlayerHullView");
+            yield return null;
+
+            var before = GameObject.Find("Room_Weapons").GetComponent<RectTransform>().rect.size;
+            ActivateButton("PlayerDeckZoom");
+            yield return null;
+            var target = GameObject.Find("Room_Weapons").GetComponent<Button>();
+            var rect = target.GetComponent<RectTransform>();
+            Assert.That(rect.rect.width, Is.GreaterThan(before.x));
+            Assert.That(rect.rect.height, Is.GreaterThan(before.y));
+            var point = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(rect.rect.center));
+            var hits = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = point }, hits);
+            Assert.That(hits, Is.Not.Empty);
+            Assert.That(hits[0].gameObject.GetComponentInParent<Button>(), Is.EqualTo(target),
+                "The hull, material mesh and hazard decoration must not intercept room controls.");
+            Assert.That(controller.Simulation.State.isPaused, Is.True, "View changes must not resume combat.");
+            controller.AbandonRun();
         }
     }
 }

@@ -39,7 +39,7 @@ namespace AetherArk.Runtime
         private Texture2D ResolveBackground()
         {
             var path = Simulation == null
-                ? BackgroundArt.FallbackPath
+                ? BackgroundArt.MenuPath
                 : BackgroundArt.ResourcePath(Simulation.State.regionIndex, Simulation.State.isFinalBattle);
             var texture = LoadBackground(path);
             return texture != null ? texture : LoadBackground(BackgroundArt.FallbackPath);
@@ -130,6 +130,16 @@ namespace AetherArk.Runtime
         {
             if (!Debug.isDebugBuild) return;
             var args = Environment.GetCommandLineArgs();
+            // Visual QA overrides are only enabled in development builds.
+            var flagshipArg = Array.IndexOf(args, "-debug-flagship");
+            if (flagshipArg >= 0 && flagshipArg + 1 < args.Length && ContentCatalog.GetFlagship(args[flagshipArg + 1]) != null)
+            {
+                Profile.tutorialSeen = true;
+                Profile.campaignVictories = Math.Max(1, Profile.campaignVictories);
+                Profile.flagshipId = args[flagshipArg + 1];
+            }
+            if (Array.IndexOf(args, "-debug-english") >= 0) L10n.Language = Language.English;
+            if (Array.IndexOf(args, "-debug-high-contrast") >= 0) Profile.accessibility.highContrast = true;
             if (TryDebugRouteLaunch(args)) return;
             if (TryDebugEventLaunch(args)) return;
             if (Array.IndexOf(args, "-debug-setup") >= 0) { ShowSetup(); return; }
@@ -246,6 +256,7 @@ namespace AetherArk.Runtime
                     break;
 
                 case GamePhase.Combat:
+                    if (Input.GetKeyDown(KeyCode.Z)) { view.ToggleDeckZoom(); return true; }
                     if (Input.GetKeyDown(KeyCode.F)) { Fire(ShipSystemType.Weapons); return true; }
                     if (Input.GetKeyDown(KeyCode.S)) { UseSupport(); return true; }
                     if (Input.GetKeyDown(KeyCode.R)) { EmergencyOrdnance(); return true; }
