@@ -164,6 +164,19 @@ namespace AetherArk.Runtime
                 if (Simulation.State.enemyShip.id == "enemy_" + wanted) break;
             }
             if (Array.IndexOf(args, "-debug-damage") >= 0) DebugScenarios.ApplyDamageShowcase(Simulation.State);
+            // Paused visual QA: first pilot lost, second pilot awaiting rescue. Never enabled in release builds.
+            if (Array.IndexOf(args, "-debug-pilots") >= 0)
+            {
+                for (var i = 0; i < Simulation.State.squadrons.Count && i < 2; i++)
+                {
+                    var pilot = Simulation.State.crew.Find(crew => crew.id == Simulation.State.squadrons[i].pilotCrewId);
+                    if (pilot == null) continue;
+                    pilot.isDead = i == 0;
+                    pilot.health = 0f;
+                    pilot.downedSeconds = 0f;
+                    pilot.onSortie = false;
+                }
+            }
             if (Array.IndexOf(args, "-debug-unpaused") >= 0) Simulation.SetPaused(false);
             Screen = FrontendScreen.Game;
             previousPhase = Simulation.State.phase;

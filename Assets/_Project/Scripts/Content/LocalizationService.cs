@@ -391,6 +391,11 @@ namespace AetherArk.Content
             Add("command.altitude_changed", "고도 변경을 시작했습니다.", "Altitude change initiated.");
             Add("command.deck_unpowered", "비행갑판에 동력이 공급되지 않습니다.", "The flight deck has no power.");
             Add("command.squadron_unavailable", "해당 편대는 출격할 수 없습니다.", "That squadron cannot launch.");
+            Add("command.pilot_missing", "배정된 조종사가 없습니다.", "No pilot is assigned.");
+            Add("command.pilot_dead", "배정된 조종사가 사망했습니다.", "The assigned pilot is dead.");
+            Add("command.pilot_downed", "조종사 구조·치료가 필요합니다.", "Pilot needs rescue or healing.");
+            Add("command.pilot_busy", "조종사가 이미 출격 중입니다.", "Pilot is already on a sortie.");
+            Add("ui.pilot", "조종사", "Pilot");
             Add("command.no_ordnance", "군수품이 부족합니다.", "Not enough ordnance.");
             Add("command.invalid_mission", "유효하지 않은 편대 임무입니다.", "Invalid squadron mission.");
             Add("command.squadron_launched", "편대가 출격했습니다.", "Squadron launched.");

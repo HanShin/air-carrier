@@ -982,19 +982,40 @@ namespace AetherArk.Core
             return CommandResult.Ok("command.altitude_changed");
         }
 
-        public CommandResult LaunchSquadron(string squadronId, SquadronMission mission, ShipSystemType target)
+        /// <summary>Read-only launch eligibility shared by UI, commands and audit tools. Never spends resources or RNG.</summary>
+        public CommandResult CheckSquadronLaunch(string squadronId, SquadronMission mission, ShipSystemType target)
         {
             if (State.phase != GamePhase.Combat) return CommandResult.Fail("command.invalid_phase");
             var deck = State.playerShip.GetSystem(ShipSystemType.FlightDeck);
             var squadron = State.squadrons.Find(item => item.id == squadronId);
             if (deck == null || deck.EffectivePower <= 0) return CommandResult.Fail("command.deck_unpowered");
             if (squadron == null || !squadron.CanLaunch) return CommandResult.Fail("command.squadron_unavailable");
-            var wing = WingOf(squadron);
-            var cost = wing != null ? wing.ordnanceCost : squadron.ordnanceCost;
-            if (State.resources.ordnance < cost) return CommandResult.Fail("command.no_ordnance");
-            if (mission == SquadronMission.None || mission == SquadronMission.Recall) return CommandResult.Fail("command.invalid_mission");
+            var pilot = string.IsNullOrEmpty(squadron.pilotCrewId) ? null : State.crew.Find(crew => crew.id == squadron.pilotCrewId);
+            if (pilot == null) return CommandResult.Fail("command.pilot_missing");
+            if (pilot.isDead) return CommandResult.Fail("command.pilot_dead");
+            if (pilot.IsDowned) return CommandResult.Fail("command.pilot_downed");
+            if (pilot.onSortie || State.squadrons.Exists(other => other != squadron && other.pilotCrewId == pilot.id &&
+                (other.status == SquadronStatus.Launching || other.status == SquadronStatus.OnMission || other.status == SquadronStatus.Recovering)))
+                return CommandResult.Fail("command.pilot_busy");
+            if (State.resources.ordnance < SquadronLaunchCost(squadron)) return CommandResult.Fail("command.no_ordnance");
+            if (!Enum.IsDefined(typeof(SquadronMission), mission) || mission == SquadronMission.None || mission == SquadronMission.Recall)
+                return CommandResult.Fail("command.invalid_mission");
+            if ((mission == SquadronMission.Bombard || mission == SquadronMission.Assault) && State.enemyShip?.GetSystem(target) == null)
+                return CommandResult.Fail("command.invalid_system");
+            return CommandResult.Ok();
+        }
 
-            State.resources.ordnance -= cost;
+        public static int SquadronLaunchCost(SquadronState squadron) => WingOf(squadron)?.ordnanceCost ?? squadron.ordnanceCost;
+
+        public CommandResult LaunchSquadron(string squadronId, SquadronMission mission, ShipSystemType target)
+        {
+            var readiness = CheckSquadronLaunch(squadronId, mission, target);
+            if (!readiness.success) return readiness;
+            var squadron = State.squadrons.Find(item => item.id == squadronId);
+            var deck = State.playerShip.GetSystem(ShipSystemType.FlightDeck);
+            var wing = WingOf(squadron);
+
+            State.resources.ordnance -= SquadronLaunchCost(squadron);
             State.hasLaunchedSquadron = true;
             squadron.mission = mission;
             squadron.targetSystem = target;

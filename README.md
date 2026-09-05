@@ -11,6 +11,7 @@ The first expedition defaults to Story difficulty and a locked, audited seed. It
 - Combat UX pass: mouse-ready command bindings, disabled-state feedback, room integrity/power/hazard bars, layered defense meters, and threat countdowns.
 - FTL-style combat screen: both ships are drawn as top-down deck plans (`ShipBlueprintView`) from per-ship `DeckPlan` data. Rooms are coloured by condition, show power pips and integrity, and carry fire/breach/oxygen overlays; crew appear as lineage-coloured tokens inside rooms and as a portrait column on the left. A detail strip under each blueprint reports the selected room's condition, hazards and posted crew, and the air-wing bar uses FTL-style slot cards with strength pips and mission gauges. Clicking a room or token issues the same commands as before.
 - Air-wing feedback: launch/mission/return progress, target labels, recovery notices, and pilot sortie state.
+- Pilot-safe sorties: the simulation and mission buttons share a read-only eligibility query. Missing, dead, downed or already-deployed pilots cannot launch; cards display the localized reason, pilot name and authoritative ordnance cost. Rescue restores eligibility, while replacing airframes does not resurrect a pilot. See `docs/PILOT_LAUNCH_VALIDATION.md` for coverage and the 600-run regression audit.
 - Warning UX: localized severity banner, explicit auto-pause reason, in-combat auto-pause toggle, and warning context that remains visible until combat resumes.
 
 - Route map drawn as a star map: circular nodes with encounter glyphs and a numbered badge on reachable nodes, a storm-front band over closed columns plus an amber warning band for the column that closes after the next jump, a legend, and a select-then-depart preview panel (aether cost vs stock, weather modifiers, recommended altitude, threat note). Number keys still jump immediately.
@@ -59,10 +60,13 @@ Emergency ordnance first consumes salvage, then supplies, then lives. It adds in
 
 Development builds accept `-debug-combat [cutter|carrier|scout|boarder|cruiser|monitor]` to open a paused battle against that enemy directly (add `-debug-unpaused` to start it running and `-debug-damage` to pre-apply fire, breach, low oxygen, damaged/disabled systems and a downed crew member), which is how screenshots are verified without keyboard automation. `-debug-route [jumps]` opens the route map after auto-resolving that many jumps so storm bands and visited nodes are visible. `-debug-event <id>` opens one authored event directly. `-debug-port` opens the port after clearing the first gate. `-debug-setup` opens expedition setup.
 
+Add `-debug-pilots` to a debug combat to mark the first wing's pilot dead and the second downed, for launch-blocking UI checks. Combine with `-debug-english` and `-debug-high-contrast` for localized visual QA. Debug scenarios use normal persistence; use a disposable test profile for interactive checks.
+
 Default pause is `Space`; it can be changed to `P` during expedition setup. Save files are written under `Application.persistentDataPath` as `profile.json` and `suspended_run.json`.
 
 ## Tests and validation
 
+- Current Unity suite: 163 EditMode and 13 PlayMode tests, including pilot eligibility, read-only rejection, rescue/recovery, save/resume and localized disabled-button coverage.
 - In Unity: **Window → General → Test Runner → EditMode → Run All**.
 - Command-line Unity test: `Unity -batchmode -nographics -projectPath <repo> -runTests -testPlatform EditMode -testResults <results.xml>`.
 - macOS development build: execute `AetherArk.Editor.ProjectBuilder.BuildMac`; output is `Builds/AetherArk.app`.

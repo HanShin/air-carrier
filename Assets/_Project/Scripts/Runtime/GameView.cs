@@ -1008,13 +1008,17 @@ namespace AetherArk.Runtime
                 var y = 104f - i * 86f;
                 var destroyed = squadron.status == SquadronStatus.Destroyed;
                 var busy = squadron.status == SquadronStatus.Launching || squadron.status == SquadronStatus.OnMission || squadron.status == SquadronStatus.Recovering;
+                var readiness = controller.Simulation.CheckSquadronLaunch(squadron.id, SquadronMission.Intercept, selectedEnemySystem);
+                var launchBlocked = squadron.CanLaunch && !readiness.success;
+                var pilot = state.crew.Find(crew => crew.id == squadron.pilotCrewId);
+                var launchCost = GameSimulation.SquadronLaunchCost(squadron);
 
                 // Slot card: role icon, name, status line, strength pips, ordnance cost.
-                var cardColor = destroyed ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : busy ? new Color(0.09f, 0.2f, 0.28f, 0.95f) : UiFactory.PanelSoft;
+                var cardColor = destroyed || launchBlocked ? new Color(0.22f, 0.08f, 0.1f, 0.95f) : busy ? new Color(0.09f, 0.2f, 0.28f, 0.95f) : UiFactory.PanelSoft;
                 var card = ui.PanelRect("SquadCard_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), cardColor);
                 card.GetComponent<Image>().raycastTarget = false;
                 ui.Outline("SquadCardEdge_" + squadron.id, panel, new Vector2(18f, y), new Vector2(340f, 76f), 1f,
-                    destroyed ? UiFactory.Danger : busy ? UiFactory.Aether : new Color(0.3f, 0.36f, 0.42f, 0.9f));
+                    destroyed || launchBlocked ? UiFactory.Danger : busy ? UiFactory.Aether : new Color(0.3f, 0.36f, 0.42f, 0.9f));
                 var wing = ContentCatalog.GetWing(squadron.wingId);
                 var squadronType = wing != null ? wing.type : squadron.type;
                 ui.Icon("SquadIcon_" + squadron.id, card, GameIconLibrary.Wing(squadronType), new Vector2(6f, 14f), new Vector2(48f, 48f),
@@ -1029,11 +1033,14 @@ namespace AetherArk.Runtime
                 if (squadron.mission != SquadronMission.None && busy) statusLine += " · " + l10n.EnumName(squadron.mission);
                 if ((squadron.mission == SquadronMission.Bombard || squadron.mission == SquadronMission.Assault) && busy)
                     statusLine += " → " + l10n.T(state.enemyShip.GetSystem(squadron.targetSystem).displayKey);
-                ui.Text("SquadStatus_" + squadron.id, card, statusLine, 12, busy ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.MiddleLeft,
+                if (launchBlocked) statusLine = l10n.T(readiness.messageKey);
+                ui.Text("SquadStatus_" + squadron.id, card, statusLine, 12, launchBlocked ? UiFactory.Danger : busy ? UiFactory.Aether : UiFactory.TextMuted, TextAnchor.MiddleLeft,
                     new Vector2(58f, 20f), new Vector2(276f, 22f));
-                ui.Text("SquadCost_" + squadron.id, card, $"{l10n.T("ui.ordnance")} {squadron.ordnanceCost}", 11,
-                    state.resources.ordnance >= squadron.ordnanceCost ? UiFactory.TextMuted : UiFactory.Danger, TextAnchor.MiddleLeft,
-                    new Vector2(58f, 4f), new Vector2(200f, 18f));
+                var recruit = pilot == null ? null : CrewLibrary.Get(pilot.id);
+                var pilotName = pilot == null ? "—" : recruit == null ? pilot.displayName : l10n.T(recruit.nameKey);
+                ui.Text("SquadCost_" + squadron.id, card, $"{l10n.T("ui.pilot")} {pilotName}  ·  {l10n.T("ui.ordnance")} {launchCost}", 11,
+                    state.resources.ordnance >= launchCost ? UiFactory.TextMuted : UiFactory.Danger, TextAnchor.MiddleLeft,
+                    new Vector2(58f, 4f), new Vector2(276f, 18f));
 
                 // Mission gauge across the card bottom.
                 var progress = squadron.status == SquadronStatus.Ready ? 1f : destroyed ? 0f :
@@ -1054,7 +1061,7 @@ namespace AetherArk.Runtime
                         : UiFactory.PanelSoft;
                     var button = ui.Button($"{squadron.id}_{mission}", panel, label, () => controller.LaunchSquadron(localSquad, mission, selectedEnemySystem),
                         new Vector2(376f + m * 298f, y + 8f), new Vector2(284f, 60f), color, UiFactory.TextPrimary, 16);
-                    button.interactable = squadron.CanLaunch && state.resources.ordnance >= squadron.ordnanceCost && deckReady;
+                    button.interactable = controller.Simulation.CheckSquadronLaunch(squadron.id, mission, selectedEnemySystem).success;
                     ui.Icon($"MissionIcon_{squadron.id}_{mission}", panel, GameIconLibrary.Mission(mission),
                         new Vector2(386f + m * 298f, y + 20f), new Vector2(36f, 36f), button.interactable ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f));
                 }
